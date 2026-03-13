@@ -62,10 +62,10 @@
 # prd-planner 自动执行
 Creating PRD using 4-file pattern...
 
-✓ docs/borrow-refresh-prd-notes.md      # 思考过程
-✓ docs/borrow-refresh-prd-task-plan.md  # 任务跟踪
-✓ docs/borrow-refresh-prd.md        # 产品需求
-✓ docs/borrow-refresh-tech.md       # 技术设计
+✓ docs/data-refresh-prd-notes.md      # 思考过程
+✓ docs/data-refresh-prd-task-plan.md  # 任务跟踪
+✓ docs/data-refresh-prd.md            # 产品需求
+✓ docs/data-refresh-tech.md           # 技术设计
 ```
 
 **prd-planner 完成后自动触发：**
@@ -115,17 +115,17 @@ Creating PRD using 4-file pattern...
 
 ```typescript
 // 实现代码示例
-import { IconButton } from '@nuvo/service-components';
+import { IconButton, Text, XStack } from 'component-library';
 
-export const BorrowRefreshButton = () => {
+export const RefreshActionButton = () => {
   const handleRefresh = useCallback(() => {
     // 根据 PRD 中的规范实现
-    requestBorrowRefresh({ reason: 'manual' });
+    requestDataRefresh({ reason: 'manual' });
   }, []);
 
   return (
     <XStack gap="$3" alignItems="center">
-      <Text variant="bodyMd">${displayAmount}</Text>
+      <Text variant="bodyMd">{displayValue}</Text>
       <IconButton
         iconSize="$4"  // 24px - PRD 中明确指定
         name="refresh"
@@ -209,10 +209,10 @@ review 一下代码
 ```bash
 # 1. 提交代码
 git add .
-git commit -m "feat: add borrow refresh button with loading state"
+git commit -m "feat: add data refresh button with loading state"
 
 # 2. 推送
-git push -u origin feat/borrow-refresh
+git push -u origin feat/data-refresh
 
 # 3. 创建 PR（自动更新中英文 README）
 ✓ PR #15 created
@@ -253,10 +253,10 @@ Claude: 我看到了这个 UI 设计图。让我使用 prd-planner 创建 PRD...
 [调用 prd-planner 技能]
 
 ✓ 创建了 4 个文件：
-  - docs/borrow-refresh-prd-notes.md
-  - docs/borrow-refresh-prd-task-plan.md
-  - docs/borrow-refresh-prd.md
-  - docs/borrow-refresh-tech.md
+  - docs/data-refresh-prd-notes.md
+  - docs/data-refresh-prd-task-plan.md
+  - docs/data-refresh-prd.md
+  - docs/data-refresh-tech.md
 
 [后台自动触发 self-improving-agent，提取 PRD 模式]
 
@@ -282,7 +282,7 @@ Claude: [调用 prd-implementation-precheck]
 
 [编写代码]
 
-✓ BorrowRefreshButton.tsx 已创建
+✓ RefreshActionButton.tsx 已创建
 ✓ 单元测试已添加
 
 ═══════════════════════════════════════════════════════════════

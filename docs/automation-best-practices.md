@@ -38,7 +38,7 @@ modules:
     - planning-with-files
 
   review_module:
-    - self-improving-prd
+    - self-improving-agent
     - code-reviewer
 
   delivery_module:
@@ -64,7 +64,7 @@ modules:
 triggers:
   - event: file_created
     file: "docs/{feature}-prd.md"
-    action: trigger_self_improvement
+    action: trigger_self_improving_agent
 
 # State-based: 状态检查时触发
 triggers:
@@ -147,9 +147,9 @@ hooks:
     - create: working_files
 
   after_complete:
-    - trigger: self_improvement
+    - trigger: self-improving-agent
       mode: background
-    - trigger: session_logger
+    - trigger: session-logger
       mode: auto
 
   on_error:
@@ -170,7 +170,7 @@ hooks:
 ├── current_workflow.json
 ├── skill_states/
 │   ├── prd-planner.json
-│   ├── self-improving-prd.json
+│   ├── self-improving-agent.json
 │   └── session-logger.json
 └── workflow_history.json
 ```
@@ -183,7 +183,7 @@ hooks:
   "current_step": "prd-planner",
   "steps": [
     {"name": "prd-planner", "status": "complete"},
-    {"name": "self-improving-prd", "status": "pending"},
+    {"name": "self-improving-agent", "status": "pending"},
     {"name": "session-logger", "status": "pending"}
   ],
   "context": {
@@ -218,7 +218,7 @@ description: Creates PRDs using persistent file-based planning
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion, WebSearch
 hooks:
   after_complete:
-    - trigger: self-improving-prd
+    - trigger: self-improving-agent
       mode: background
     - trigger: session-logger
       mode: auto
@@ -231,7 +231,7 @@ hooks:
 ## Workflow: PRD Creation
 
 When prd-planner completes:
-1. Automatically trigger self-improving-prd (background)
+1. Automatically trigger self-improving-agent (background)
 2. Automatically trigger session-logger (auto)
 3. Ask user if they want to create PR
 ```
@@ -263,7 +263,7 @@ logging:
 ## Workflow Progress
 
 - [x] Step 1: prd-planner ✓
-- [ ] Step 2: self-improving-prd (In Progress...)
+- [ ] Step 2: self-improving-agent (In Progress...)
 - [ ] Step 3: session-logger
 - [ ] Step 4: create-pr (Ask user)
 ```

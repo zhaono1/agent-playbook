@@ -4,7 +4,7 @@
 
 ## Installation
 
-This skill is part of the [agent-playbook](https://github.com/Charon-Fan/agent-playbook) collection.
+This skill is part of the [agent-playbook](../../README.md) collection.
 
 ## Usage
 
