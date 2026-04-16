@@ -20,8 +20,17 @@ pnpm dlx @codeharbor/agent-playbook init --project
 - Links skills to `~/.claude/skills`, `~/.codex/skills`, and `~/.gemini/skills` (or project `.claude/.codex/.gemini`).
 - Installs a stable CLI copy under `~/.claude/agent-playbook/` for hook execution.
 - Adds Claude hooks for SessionEnd (session logs) and PostToolUse (self-improve MVP).
-- Records a metadata block in `~/.codex/config.toml`.
+- Records an `agent_playbook` metadata block in `~/.codex/config.toml`.
+- Prepares Gemini skill directories, but does not wire Gemini hooks yet.
 - Provides a local-only skills manager via `apb skills ...`.
+
+## Platform support
+
+| Platform | Skill install | Hooks/config automation | Current status |
+|----------|---------------|-------------------------|----------------|
+| Claude Code | Yes | Installs SessionEnd and PostToolUse hooks | Full |
+| Codex | Yes | Writes `agent_playbook` metadata block | Partial |
+| Gemini | Yes | No hook wiring yet | Skill distribution only |
 
 ## Commands
 - `agent-playbook init [--project] [--copy] [--overwrite] [--hooks] [--no-hooks] [--session-dir <path>] [--dry-run] [--repo <path>]`

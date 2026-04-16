@@ -12,7 +12,7 @@
 
 ### 方法零：一键安装（PNPM/NPM）
 
-为 Claude Code、Codex 和 Gemini 配置技能，并接入会话日志与自我进化 hooks。
+为 Claude Code、Codex 和 Gemini 配置技能。目前会为 Claude Code 接入会话日志与自我进化 hooks，为 Codex 写入 `agent_playbook` 元数据块，并为 Gemini 准备技能目录。
 
 ```bash
 pnpm dlx @codeharbor/agent-playbook init
@@ -87,6 +87,16 @@ apb skills add ./skills/my-skill --scope project --target claude
 ```
 
 `apb` 是 `agent-playbook` 的短别名。
+
+## 平台支持情况
+
+| 平台 | 技能安装 | Hook / 配置自动化 | 当前状态 |
+|------|----------|-------------------|----------|
+| Claude Code | 支持 | 自动安装 SessionEnd 与 PostToolUse hooks | 完整 |
+| Codex | 支持 | 向 `~/.codex/config.toml` 写入 `agent_playbook` 元数据块 | 部分支持 |
+| Gemini | 支持 | 暂无 hook 自动接入 | 仅技能分发 |
+
+MCP server 是独立的可选集成，目前文档以 Claude Code 为主。
 
 ## 项目结构
 

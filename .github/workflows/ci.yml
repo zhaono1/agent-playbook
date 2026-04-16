@@ -46,7 +46,7 @@ jobs:
         with:
           args: --config .lychee.toml --no-progress
 
-  mcp-server-smoke:
+  mcp-server:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,4 +56,5 @@ jobs:
       - run: |
           cd mcp-server
           npm ci
+          npm test
           timeout 5s node index.js < /dev/null || test $? -eq 124

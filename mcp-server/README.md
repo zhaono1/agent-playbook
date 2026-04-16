@@ -77,7 +77,7 @@ You: What happens after prd-planner completes?
 
 Claude: [get_skill_hooks skill_name="prd-planner"]
 
-Returns: Triggers self-improving-agent + session-logger
+Returns: Full hook configuration, including `after_complete`
 ```
 
 ## Available Tools
@@ -87,7 +87,7 @@ Returns: Triggers self-improving-agent + session-logger
 | `list_skills` | List all skills, optionally filtered by category |
 | `get_skill` | Get detailed info about a specific skill |
 | `search_skills` | Search skills by keyword |
-| `get_skill_hooks` | Get auto-trigger configuration for a skill |
+| `get_skill_hooks` | Get the parsed hook configuration for a skill |
 
 ## Categories
 
@@ -98,6 +98,7 @@ Returns: Triggers self-improving-agent + session-logger
 | `docs` | documentation-engineer, api-documenter, test-automator, qa-expert |
 | `architecture` | api-designer, security-auditor, performance-engineer, deployment-engineer |
 | `planning` | prd-planner, prd-implementation-precheck, architecting-solutions, planning-with-files |
+| `design` | figma-designer |
 
 ## Benefits
 

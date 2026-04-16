@@ -12,7 +12,7 @@ This repository organizes and stores practical resources for working with AI Age
 
 ### Method 0: One-Command Installer (PNPM/NPM)
 
-Sets up skills for Claude Code, Codex, and Gemini, and wires hooks for session logging and self-improvement.
+Sets up skills for Claude Code, Codex, and Gemini. It currently wires session logging and self-improvement hooks for Claude Code, records an `agent_playbook` metadata block for Codex, and prepares Gemini skill directories.
 
 ```bash
 pnpm dlx @codeharbor/agent-playbook init
@@ -87,6 +87,16 @@ apb skills add ./skills/my-skill --scope project --target claude
 ```
 
 `apb` is a short alias for `agent-playbook`.
+
+## Platform support
+
+| Platform | Skill install | Hooks/config automation | Current status |
+|----------|---------------|-------------------------|----------------|
+| Claude Code | Yes | Installs SessionEnd and PostToolUse hooks | Full |
+| Codex | Yes | Writes `agent_playbook` metadata block to `~/.codex/config.toml` | Partial |
+| Gemini | Yes | No hook wiring yet | Skill distribution only |
+
+The MCP server is a separate optional integration and is currently documented for Claude Code.
 
 ## Project Structure
 

@@ -1,0 +1,37 @@
+{
+  "meta": [
+    "skill-router",
+    "create-pr",
+    "session-logger",
+    "workflow-orchestrator",
+    "self-improving-agent",
+    "auto-trigger"
+  ],
+  "core": [
+    "commit-helper",
+    "code-reviewer",
+    "debugger",
+    "refactoring-specialist"
+  ],
+  "docs": [
+    "documentation-engineer",
+    "api-documenter",
+    "test-automator",
+    "qa-expert"
+  ],
+  "architecture": [
+    "api-designer",
+    "security-auditor",
+    "performance-engineer",
+    "deployment-engineer"
+  ],
+  "planning": [
+    "prd-planner",
+    "prd-implementation-precheck",
+    "architecting-solutions",
+    "planning-with-files"
+  ],
+  "design": [
+    "figma-designer"
+  ]
+}

@@ -97,6 +97,6 @@ test("doctor reports healthy when hooks and config are present", () => {
   );
 
   assert.strictEqual(result.status, 0);
-  assert.match(result.stdout, /Hooks installed: yes/);
+  assert.match(result.stdout, /Claude hooks installed: yes/);
   assert.match(result.stdout, /Codex config block: yes/);
 });

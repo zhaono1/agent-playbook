@@ -2407,13 +2407,13 @@ function summarizeIssues(status) {
     issues.push("unable to parse ~/.claude/settings.json");
   }
   if (!status.manifestPresent) {
-    issues.push("missing skill manifest (.agent-playbook.json)");
+    issues.push("missing Claude skill manifest (.agent-playbook.json)");
   }
   if (!status.hooksInstalled) {
-    issues.push("hooks not installed");
+    issues.push("Claude hooks not installed");
   }
   if (!status.localCliPresent) {
-    issues.push("local CLI not installed under ~/.claude/agent-playbook");
+    issues.push("Claude local CLI not installed under ~/.claude/agent-playbook");
   }
   if (!status.codexBlockPresent) {
     issues.push("Codex config missing agent_playbook block");
@@ -2432,9 +2432,9 @@ function printStatus(status) {
   console.log(`- Claude skills count: ${status.claudeSkillCount}`);
   console.log(`- Codex skills count: ${status.codexSkillCount}`);
   console.log(`- Gemini skills count: ${status.geminiSkillCount}`);
-  console.log(`- Hooks installed: ${status.hooksInstalled ? "yes" : "no"}`);
-  console.log(`- Manifest present: ${status.manifestPresent ? "yes" : "no"}`);
-  console.log(`- Local CLI present: ${status.localCliPresent ? "yes" : "no"}`);
+  console.log(`- Claude hooks installed: ${status.hooksInstalled ? "yes" : "no"}`);
+  console.log(`- Claude manifest present: ${status.manifestPresent ? "yes" : "no"}`);
+  console.log(`- Claude local CLI present: ${status.localCliPresent ? "yes" : "no"}`);
   console.log(`- Codex config block: ${status.codexBlockPresent ? "yes" : "no"}`);
 }
 
