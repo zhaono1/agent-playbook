@@ -97,7 +97,7 @@ Returns: Full hook configuration, including `after_complete`
 | `core` | commit-helper, code-reviewer, debugger, refactoring-specialist |
 | `docs` | documentation-engineer, api-documenter, test-automator, qa-expert |
 | `architecture` | api-designer, security-auditor, performance-engineer, deployment-engineer |
-| `planning` | prd-planner, prd-implementation-precheck, architecting-solutions, planning-with-files |
+| `planning` | prd-planner, prd-implementation-precheck, architecting-solutions, planning-with-files, long-task-coordinator |
 | `design` | figma-designer |
 
 ## Benefits

@@ -54,8 +54,8 @@
       "pattern": "Prefer direct state monitoring over callback chains for side effects",
       "problem": "Callback chains passed through multiple layers are hard to trace and debug",
       "solution": {
-        "anti_pattern": "useBorrowTxUpdate({ onRefresh: () => { /* refresh logic */ } });",
-        "pattern": "const pendingCount = txs.length;\nconst prevPendingCount = usePrevious(pendingCount);\nuseEffect(() => {\n  if (pendingCount < prevPendingCount) {\n    requestBorrowRefresh({ reason: 'completed' });\n  }\n}, [pendingCount, prevPendingCount]);"
+        "anti_pattern": "useActionQueue({ onRefresh: () => { /* refresh logic */ } });",
+        "pattern": "const pendingCount = requests.length;\nconst prevPendingCount = usePrevious(pendingCount);\nuseEffect(() => {\n  if (pendingCount < prevPendingCount) {\n    triggerDataRefresh({ reason: 'completed' });\n  }\n}, [pendingCount, prevPendingCount]);"
       },
       "when_to_use": [
         "State changes need to trigger side effects",
@@ -112,7 +112,7 @@
           "No performance regression"
         ],
         "good_examples": [
-          "BorrowHome data refreshes within 3-5 seconds after pending transaction completes",
+          "Dashboard data refreshes within 3-5 seconds after a pending action completes",
           "Manual refresh button triggers full refresh and shows loading state",
           "API response time under 500ms for 95th percentile"
         ]
@@ -188,8 +188,8 @@
       "pattern": "Always check if Context/Provider already has the data before adding new fetching",
       "problem": "Adding duplicate data fetching creates redundant network calls and complexity",
       "solution": {
-        "anti_pattern": "const { pendingTxs } = useBorrowTxUpdate({ accountId, networkId, provider }); // Creates new polling loop!",
-        "pattern": "const { pendingTxs } = useBorrowContext(); // BorrowDataGate already updates this"
+        "anti_pattern": "const { pendingRequests } = useActionQueue({ workspaceId, userId, client }); // Creates new polling loop!",
+        "pattern": "const { pendingRequests } = useFeatureContext(); // Shared provider already updates this"
       },
       "quality_checklist": [
         "Check if Context/Provider already has the data",
@@ -211,8 +211,8 @@
       "pattern": "For mutable state, compute at action time, not at render/init time",
       "problem": "Open-time computation creates stale snapshots when state changes before user acts",
       "solution": {
-        "anti_pattern": "const allIds = useMemo(() =>\n  claimableItems.filter(i => !pendingClaimIds.includes(i.id)),\n  [claimableItems, pendingClaimIds]\n); // Stale if pendingClaimIds changes before user clicks",
-        "pattern": "onClaimAll: (ids: string[]) => Promise<void> => {\n  const freshIds = claimableItems\n    .filter(i => !pendingClaimIds.includes(i.id))\n    .map(i => i.id);\n  return submitClaim(freshIds);\n}"
+        "anti_pattern": "const allIds = useMemo(() =>\n  actionableItems.filter(i => !inFlightIds.includes(i.id)),\n  [actionableItems, inFlightIds]\n); // Stale if inFlightIds changes before user clicks",
+        "pattern": "onRunAll: (ids: string[]) => Promise<void> => {\n  const freshIds = actionableItems\n    .filter(i => !inFlightIds.includes(i.id))\n    .map(i => i.id);\n  return submitBatchAction(freshIds);\n}"
       },
       "decision_matrix": {
         "open_time": ["Immutable data", "Expensive computation"],

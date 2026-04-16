@@ -130,16 +130,16 @@ interface UserData {
 **Refactoring:** Move Method
 ```typescript
 // Before:
-class Order {
-  calculatePrice(customer) {
-    const discount = customer.getDiscountLevel();
+class Report {
+  formatSummary(formatter) {
+    const options = formatter.getFormattingOptions();
     // ...
   }
 }
 
 // After:
-class Customer {
-  calculatePriceForOrder(order) {
+class Formatter {
+  formatReport(report) {
     const discount = this.discountLevel;
     // ...
   }

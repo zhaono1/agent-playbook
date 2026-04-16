@@ -1,6 +1,6 @@
 {
   "name": "@codeharbor/agent-playbook",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Local skill manager and installer for agent-playbook across Claude Code, Codex, and Gemini.",
   "license": "MIT",
   "type": "commonjs",

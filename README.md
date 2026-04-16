@@ -6,7 +6,36 @@ English | [简体中文](./README.zh-CN.md)
 
 ## Overview
 
-This repository organizes and stores practical resources for working with AI Agents like Claude Code, including prompt templates, custom skills, usage examples, and best practices.
+This repository collects practical, public-facing building blocks for AI agents: reusable skills, prompt patterns, workflow docs, and tooling for Claude Code, Codex, and Gemini.
+
+Everything in this repository is intended to stay portable and abstract. Private operating details, company-specific workflows, and sensitive business context should live elsewhere.
+
+## What you get
+
+- Reusable skills with focused `SKILL.md` files and deeper `references/` material
+- Installation and lifecycle tooling through `@codeharbor/agent-playbook`
+- An MCP server for skill discovery
+- Workflow docs for planning, self-improvement, automation, and context design
+
+## Design Principles
+
+The repository is evolving around a few portable agent design rules:
+
+- Keep hard constraints always-on, but keep them short
+- Turn reusable methods into skills
+- Keep detailed facts and examples retrievable from references and docs
+- Persist long-running task state outside chat so recovery is reliable
+
+Further reading:
+
+- [Context Layering for Agent Playbooks](./docs/context-layering-for-agent-playbooks.md)
+- [long-task-coordinator](./skills/long-task-coordinator/)
+
+## Who this is for
+
+- Builders creating their own reusable agent skills
+- Teams standardizing how agents plan, review, and recover work
+- Power users who want local-first tooling instead of SaaS-heavy orchestration
 
 ## Installation
 
@@ -157,6 +186,7 @@ agent-playbook/
 | **[prd-implementation-precheck](./skills/prd-implementation-precheck/)** | Performs preflight review before implementing PRDs | Manual |
 | **[architecting-solutions](./skills/architecting-solutions/)** | Technical solution and architecture design | Manual (keyword: "design solution") |
 | **[planning-with-files](./skills/planning-with-files/)** | General file-based planning for multi-step tasks | Manual |
+| **[long-task-coordinator](./skills/long-task-coordinator/)** | Coordinates multi-session or delegated work with persistent state and recovery rules | Manual |
 
 ### Design & Creative
 
@@ -224,27 +254,27 @@ code-reviewer → self-improving-agent → create-pr
 
 ## AI Agent Learning Path
 
-**[docs/ai-agent-learning-path.md](./docs/ai-agent-learning-path.md)** - 适用于 Claude、GLM、Codex 的 Agent 开发学习路径：
+**[docs/ai-agent-learning-path.md](./docs/ai-agent-learning-path.md)** - A progressive learning path for building agents with Claude, GLM, and Codex:
 
-| Level | 主题 | 时间 | 产出 |
+| Level | Topic | Time | Outcome |
 |-------|------|------|------|
-| 1 | 基础提示工程 | 1 周 | 完成单一任务 |
-| 2 | Skill 技能开发 | 1 周 | 第一个可复用 Skill |
-| 3 | 工作流编排 | 2 周 | 完整自动化流程 |
-| 4 | 自我学习系统 | 2-3 周 | 从经验中学习的 Agent |
-| 5 | 自进化 Agent | 2-3 周 | 完全自主进化 |
+| 1 | Prompt engineering fundamentals | 1 week | Complete a single-task workflow |
+| 2 | Skill development | 1 week | Ship a first reusable skill |
+| 3 | Workflow orchestration | 2 weeks | Build a complete automated workflow |
+| 4 | Self-learning systems | 2-3 weeks | Create an agent that learns from experience |
+| 5 | Self-evolving agents | 2-3 weeks | Build a more autonomous improvement loop |
 
 ## Complete Workflow Example
 
-**[docs/complete-workflow-example.md](./docs/complete-workflow-example.md)** - 从图片/需求到交付的完整流程演示：
+**[docs/complete-workflow-example.md](./docs/complete-workflow-example.md)** - An end-to-end example from input or design reference to final delivery:
 
-1. **Input** → 上传图片或描述需求
-2. **PRD** → `prd-planner` 创建 PRD（自动触发 `self-improving-agent`）
-3. **Review** → 自我审核和改进
-4. **Implement** → 根据 PRD 编写代码
-5. **Review** → `code-reviewer` 检查质量
-6. **Feedback** → `self-improving-agent` 从经验中学习
-7. **Submit** → `create-pr` 提交并同步中英文 README
+1. **Input** → Upload an image or describe the request
+2. **PRD** → `prd-planner` creates the PRD and can trigger `self-improving-agent`
+3. **Review** → Review and refine the plan
+4. **Implement** → Build against the PRD
+5. **Review** → `code-reviewer` checks quality
+6. **Feedback** → `self-improving-agent` learns from the result
+7. **Submit** → `create-pr` opens a PR and keeps bilingual docs aligned
 
 ## Updating Skills
 
@@ -270,9 +300,14 @@ When contributing skills:
 1. Add your skill to the appropriate category in the Skills Catalog above
 2. Include `SKILL.md` with proper front matter (name, description, allowed-tools, hooks)
 3. Add `README.md` with usage examples
-4. Update both README.md and README.zh-CN.md
-5. Validate skill structure: `python3 scripts/validate_skills.py`
-6. Optional: run skills-ref validation: `python3 -m pip install "git+https://github.com/agentskills/agentskills.git@main#subdirectory=skills-ref" && skills-ref validate skills/<name>`
+4. Keep `SKILL.md` lean and move long procedures or templates into `references/`
+5. Prefer abstract, portable guidance over private or business-specific knowledge
+6. Add explicit acceptance criteria so the skill has a clear definition of done
+7. Add lightweight eval prompts or scenario checks for new skills when practical
+8. Follow the structure and guidance from [Anthropic's skill-creator](https://github.com/anthropics/skills/tree/main/skills/skill-creator)
+9. Update both README.md and README.zh-CN.md when bilingual parity is part of the change
+10. Validate skill structure: `python3 scripts/validate_skills.py`
+11. Optional: run skills-ref validation: `python3 -m pip install "git+https://github.com/agentskills/agentskills.git@main#subdirectory=skills-ref" && skills-ref validate skills/<name>`
 
 ## License
 

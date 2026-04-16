@@ -29,7 +29,8 @@
     "prd-planner",
     "prd-implementation-precheck",
     "architecting-solutions",
-    "planning-with-files"
+    "planning-with-files",
+    "long-task-coordinator"
   ],
   "design": [
     "figma-designer"

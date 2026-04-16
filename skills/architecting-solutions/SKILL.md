@@ -99,8 +99,8 @@ ls -la packages/kit/src/views/similar-feature/
 
 ```bash
 # Find all imports/usages of a module
-grep -r "useBorrowContext" packages/ --include="*.ts" --include="*.tsx"
-grep -r "borrowRefreshReservesRef" packages/ --include="*.ts" --include="*.tsx"
+grep -r "useFeatureContext" packages/ --include="*.ts" --include="*.tsx"
+grep -r "refreshSignalRef" packages/ --include="*.ts" --include="*.tsx"
 ```
 
 **CRITICAL: Before proposing a refactoring, ask:**
@@ -134,16 +134,16 @@ For unfamiliar domains, search for best practices.
 ```
 Problem: Data doesn't refresh after operation
 
-Option 1 (Minimal): Hook into existing pendingTx count decrease
+Option 1 (Minimal): Hook into existing pending request count decrease
   - Changes: 1-2 files
   - Risk: Low
   - Selected: ✓
 
-Option 2 (Medium): Add refresh callback through existing context
+Option 2 (Medium): Add refresh callback through existing shared context
   - Changes: 3-5 files
   - Risk: Medium
 
-Option 3 (Comprehensive): Migrate to Jotai Context pattern
+Option 3 (Comprehensive): Migrate to a centralized state-store pattern
   - Changes: 10+ files, new atoms/actions
   - Risk: High
   - Time: 2-3 days
@@ -179,7 +179,7 @@ Output location: `{PROJECT_ROOT}/docs/{feature-name}-prd.md`
 
 Example:
 - If project root is `/Users/user/my-project/`, write to `/Users/user/my-project/docs/feature-name-prd.md`
-- Use kebab-case for filename: `borrow-refresh-logic-refactoring-prd.md`
+- Use kebab-case for filename: `data-refresh-logic-refactoring-prd.md`
 
 ## Step 7: Validate with User
 
@@ -242,7 +242,7 @@ For bugs and refresh issues, ALWAYS verify:
 # Migration Scope Completeness
 
 - [ ] **ALL existing state is accounted for**: List every piece of state being migrated
-  - What states are being migrated? (e.g., reserves, market, reservesLoading, swapConfig, pendingTxs)
+  - What states are being migrated? (e.g., items, summary, isLoading, filters, pendingRequests)
   - What's the migration strategy for each? (direct move / transform / deprecate)
 
 - [ ] **ALL consumers are identified**: Find every file that uses the code being changed
@@ -261,16 +261,16 @@ For bugs and refresh issues, ALWAYS verify:
 - [ ] **No dead state**: Every new state/state variable has a defined purpose and consumer
 - [ ] **No undefined references**: All imports/references resolve to existing code
 - [ ] **Complete call chain documented**: From trigger → callback → effect, show every step
-- [ ] **All related operations covered**: If module has Supply/Withdraw/Borrow/Repay/Claim, test all of them
+- [ ] **All related operations covered**: If module has Create/Edit/Delete/Import/Export, test all of them
 
 ## React/Hook Rules Compliance
 
-- [ ] **No conditional hooks**: Never call hooks conditionally (e.g., `isBorrowType ? useHook() : null`)
+- [ ] **No conditional hooks**: Never call hooks conditionally (e.g., `isAdvancedMode ? useHook() : null`)
   - Hooks MUST be called at the top level, unconditionally
   - If conditional logic is needed, use early return or conditional rendering
 
 - [ ] **Ref usage is correct**: If using ref pattern, access via `.current`
-  - Check: `useBorrowActions().current` not `useBorrowActions()`
+  - Check: `useFeatureActions().current` not `useFeatureActions()`
 
 ## Provider Pattern Completeness
 
@@ -283,7 +283,7 @@ For bugs and refresh issues, ALWAYS verify:
 
 ## Auto-mount/System Integration
 
-- [ ] **Enum registration**: Added to appropriate enum (e.g., `EJotaiContextStoreNames`)
+- [ ] **Enum registration**: Added to appropriate enum (e.g., `EContextStoreNames`)
 - [ ] **Switch case registration**: Added to auto-mount switch statement
 - [ ] **Store initialization**: Store initialization logic is complete
 - [ ] **No duplicate registrations**: Verify no conflicts with existing entries
@@ -310,7 +310,7 @@ For bugs and refresh issues, ALWAYS verify:
 | "Make it faster" | "Implement caching to reduce API calls from 5 to 1 per session" |
 | "Clean up the code" | "Extract duplicate logic into shared utility functions" |
 | "Fix the bug" | "Handle null case in getUserById when user doesn't exist" |
-| "Refactor to use Jotai" | "Migrate from Context+Ref to Jotai: <detailed state list and migration strategy>" |
+| "Refactor the state layer" | "Migrate from Context+Ref to a centralized store: <detailed state list and migration strategy>" |
 | **Over-engineering** | **Start with simplest solution, extend only if needed** |
 
 ---
@@ -320,8 +320,8 @@ For bugs and refresh issues, ALWAYS verify:
 ## The Problem with Jumping to Complex Solutions
 
 **Real Case Study:**
-- **PRD Proposed**: Full Jotai Context migration (10+ files, 2-3 days)
-- **Actual Solution**: Hook into existing pendingTx count decrease (1-2 files, 1 hour)
+- **PRD Proposed**: Full shared state-store migration (10+ files, 2-3 days)
+- **Actual Solution**: Hook into existing pending request count decrease (1-2 files, 1 hour)
 - **Lesson**: Always look for the simplest solution first
 
 ## Signs You Might Be Over-Engineering
@@ -428,27 +428,27 @@ For bugs and refresh issues, ALWAYS verify:
 **Bad**: "onRefresh triggers data refresh"
 **Good**:
 ```
-onRefresh() → navigation.goBack() → BorrowHome focused
+onRefresh() → navigation.goBack() → Dashboard focused
   → usePromiseResult (revalidateOnFocus: true) fires
-  → refreshReserves() → handleRefresh()
-  → fetchReserves() + refreshBorrowRewards() + refreshHealthFactor()
+  → refreshItems() → handleRefresh()
+  → fetchItems() + refreshSummary() + refreshMetrics()
 ```
 
 Include file paths and line numbers for each step!
 
 ### Test Coverage - Cover ALL Operations
 
-If module has 5 operations (Supply/Withdraw/Borrow/Repay/Claim), test all 5.
+If module has 5 operations (Create/Edit/Delete/Import/Export), test all 5.
 Don't just test the 2 you're focused on.
 
 ### Timeline Analysis for Refresh/Timing Issues
 
 Draw out the timeline:
 ```
-0s  ---- Modal opens, user starts Supply
-10s ---- Transaction submitted, pending: 0→1
+0s  ---- Modal opens, user starts Edit
+10s ---- Action submitted, pending: 0→1
 15s ---- Modal closes
-        └─ BorrowHome's hook last polled at 5s
+        └─ Dashboard hook last polled at 5s
         └─ Next poll at 35s (25s away!) ❌
 ```
 
@@ -461,7 +461,7 @@ This shows WHY it doesn't work.
 | Empty callback | `onRefresh: () => {}` | Implement actual logic or remove |
 | Incomplete root cause | "It doesn't refresh" | Explain WHY: timing/scope/disconnected |
 | Missing call chain | "Somehow triggers refresh" | Document every step with file:line |
-| Incomplete testing | Only test Supply/Withdraw | Also test Borrow/Repay/Claim |
+| Incomplete testing | Only test Create/Edit | Also test Delete/Import/Export |
 | Assumptions as facts | "revalidateOnFocus fires on modal close" | Verify: only fires on actual focus change |
 | Wrong trigger condition | "Pending changes" | Code shows: `!isPending && prevIsPending` (decreases) |
 

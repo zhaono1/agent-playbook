@@ -38,6 +38,8 @@ function main(argv, context) {
       return handleSelfImprove(options);
     case "skills":
       return handleSkills(options, parsed.positionals, context);
+    case "upgrade":
+      return handleUpgrade(options);
     case "help":
     case "--help":
     case "-h":
@@ -62,6 +64,9 @@ function printHelp() {
     "Hook commands:",
     `  ${APP_NAME} session-log [--session-dir <path>]`,
     `  ${APP_NAME} self-improve`,
+    "",
+    "Other commands:",
+    `  ${APP_NAME} upgrade`,
   ];
   console.log(text.join("\n"));
 }
@@ -339,6 +344,35 @@ async function handleSelfImprove(options) {
   const workingPath = path.join(workingDir, "current_session.json");
   fs.writeFileSync(workingPath, JSON.stringify(entry, null, 2));
   console.error(`Self-improvement entry saved to ${entryPath}`);
+}
+
+async function handleUpgrade(options) {
+  const { execSync } = require("child_process");
+  console.log(`Current version: ${VERSION}`);
+  console.log(`Checking for updates...`);
+
+  try {
+    const latestVersion = execSync(`npm view ${PACKAGE_NAME} version`, {
+      encoding: "utf8",
+    }).trim();
+
+    if (latestVersion === VERSION) {
+      console.log(`Already at the latest version (${VERSION}).`);
+      return;
+    }
+
+    console.log(`New version available: ${latestVersion}`);
+    console.log(`Upgrading ${PACKAGE_NAME}...`);
+
+    execSync(`npm install -g ${PACKAGE_NAME}@latest`, {
+      stdio: "inherit",
+    });
+
+    console.log(`Successfully upgraded to ${latestVersion}.`);
+  } catch (error) {
+    console.error(`Upgrade failed: ${error.message}`);
+    process.exit(1);
+  }
 }
 
 function detectSkillCompletion(toolName, toolInput, toolOutput, cwd) {

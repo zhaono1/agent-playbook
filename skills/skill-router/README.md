@@ -77,7 +77,7 @@ Shall we start with api-designer?
 | **Core Development** | commit-helper, code-reviewer, debugger, refactoring-specialist |
 | **Documentation & Testing** | documentation-engineer, api-documenter, test-automator, qa-expert |
 | **Architecture & DevOps** | api-designer, security-auditor, performance-engineer, deployment-engineer |
-| **Planning & Analysis** | architecting-solutions, planning-with-files, self-improving-agent |
+| **Planning & Analysis** | architecting-solutions, planning-with-files, long-task-coordinator, self-improving-agent |
 
 ## Features
 
@@ -116,6 +116,7 @@ Shall we start with api-designer?
 | "improve performance" | performance-engineer |
 | "check security" | security-auditor |
 | "refactor code" | refactoring-specialist |
+| "resume this long task" | long-task-coordinator |
 | "commit these changes" | commit-helper |
 
 ## Architecture

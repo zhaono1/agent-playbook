@@ -63,6 +63,7 @@ This skill activates when you:
 |-------|----------|
 | `architecting-solutions` | Creating PRDs, solution design, requirements analysis |
 | `planning-with-files` | Multi-step task planning, persistent file-based organization |
+| `long-task-coordinator` | Multi-session, delegated, or resumable work that needs explicit state and recovery |
 | `self-improving-agent` | Universal self-improvement that learns from all skill experiences |
 
 ## Routing Process
@@ -175,6 +176,7 @@ Use semantic similarity when keywords don't match directly:
 - "clean up my code" → `refactoring-specialist`
 - "make my app faster" → `performance-engineer`
 - "check for security issues" → `security-auditor`
+- "resume this interrupted workflow" → `long-task-coordinator`
 
 ### Multi-Skill Orchestrations
 Suggest skill combinations for complex workflows:
