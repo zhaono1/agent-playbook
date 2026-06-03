@@ -23,6 +23,10 @@ function writeSkill(targetDir, name) {
   );
 }
 
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
 test("doctor reports healthy when hooks and config are present", () => {
   const tempDir = makeTempDir();
   const claudeDir = path.join(tempDir, "claude");
@@ -99,4 +103,43 @@ test("doctor reports healthy when hooks and config are present", () => {
   assert.strictEqual(result.status, 0);
   assert.match(result.stdout, /Claude hooks installed: yes/);
   assert.match(result.stdout, /Codex config block: yes/);
+});
+
+test("init shell-quotes hook paths and session dir", () => {
+  const tempDir = makeTempDir();
+  const claudeDir = path.join(tempDir, "claude");
+  const codexDir = path.join(tempDir, "codex");
+  const geminiDir = path.join(tempDir, "gemini");
+  const repoRoot = path.resolve(__dirname, "..", "..", "..");
+  const sessionDir = path.join(tempDir, "sessions with 'quote $(touch bad)");
+
+  const result = spawnSync(
+    process.execPath,
+    [binPath, "init", "--repo", repoRoot, "--session-dir", sessionDir],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
+        AGENT_PLAYBOOK_CODEX_DIR: codexDir,
+        AGENT_PLAYBOOK_GEMINI_DIR: geminiDir,
+      },
+    }
+  );
+
+  assert.strictEqual(result.status, 0);
+
+  const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8"));
+  const sessionCommand = settings.hooks.SessionEnd[0].hooks[0].command;
+  const improveCommand = settings.hooks.PostToolUse[0].hooks[0].command;
+  const cliPath = path.join(claudeDir, "agent-playbook", "bin", "agent-playbook.js");
+
+  assert.equal(
+    sessionCommand,
+    `${shellQuote(cliPath)} session-log --hook-source agent-playbook --session-dir ${shellQuote(sessionDir)}`
+  );
+  assert.equal(
+    improveCommand,
+    `${shellQuote(cliPath)} self-improve --hook-source agent-playbook`
+  );
 });

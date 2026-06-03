@@ -1,6 +1,6 @@
 # Agent Playbook MCP Server
 
-A Model Context Protocol (MCP) server that exposes agent-playbook skills as tools and resources to Claude Code.
+A Model Context Protocol (MCP) server that exposes agent-playbook skills as tools to Claude Code.
 
 ## Features
 
@@ -93,7 +93,7 @@ Returns: Full hook configuration, including `after_complete`
 
 | Category | Skills |
 |----------|--------|
-| `meta` | skill-router, create-pr, session-logger, workflow-orchestrator, self-improving-agent |
+| `meta` | skill-router, create-pr, session-logger, workflow-orchestrator, self-improving-agent, auto-trigger |
 | `core` | commit-helper, code-reviewer, debugger, refactoring-specialist |
 | `docs` | documentation-engineer, api-documenter, test-automator, qa-expert |
 | `architecture` | api-designer, security-auditor, performance-engineer, deployment-engineer |

@@ -13,8 +13,8 @@ Session Logger captures your conversations with Claude Code so you can:
 ## Installation
 
 ```bash
-# Create symbolic link to global skills directory
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/session-logger/SKILL.md ~/.claude/skills/session-logger.md
+mkdir -p ~/.claude/skills
+ln -s ~/Documents/code/GitHub/agent-playbook/skills/session-logger ~/.claude/skills/session-logger
 ```
 
 ## Usage

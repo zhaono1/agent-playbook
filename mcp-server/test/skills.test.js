@@ -27,6 +27,12 @@ test("getSkill returns parsed hooks and allowed tools", async () => {
   assert.ok(parsed.hooks.after_complete.length > 0);
 });
 
+test("getSkill rejects non-canonical skill names", async () => {
+  const parsed = JSON.parse(await getSkill("../skills/create-pr/SKILL", false, { skillsDir }));
+
+  assert.deepEqual(parsed, { error: "Skill '../skills/create-pr/SKILL' not found" });
+});
+
 test("getSkillHooks returns the full hook configuration", async () => {
   const parsed = JSON.parse(await getSkillHooks("skill-router", { skillsDir }));
 

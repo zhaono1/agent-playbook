@@ -15,6 +15,7 @@ const SKILLS_DIR = path.join(__dirname, "../skills");
 const CATALOG_PATH = path.join(SKILLS_DIR, "catalog.json");
 const SKILL_FILE_NAME = "SKILL.md";
 const DEFAULT_CATEGORY = "other";
+const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CATEGORY_MAP = loadSkillCatalog();
 const CATEGORY_NAMES = Object.keys(CATEGORY_MAP);
 
@@ -209,26 +210,31 @@ function getSkillCategory(skillName, categoryMap = CATEGORY_MAP) {
 }
 
 async function readSkill(skillName, skillsDir = SKILLS_DIR) {
-  const possiblePaths = [path.join(skillsDir, skillName, SKILL_FILE_NAME), path.join(skillsDir, `${skillName}.md`)];
-
-  for (const skillPath of possiblePaths) {
-    try {
-      const content = await fs.readFile(skillPath, "utf8");
-      const frontMatter = extractFrontMatter(content);
-      if (!frontMatter) {
-        continue;
-      }
-      return {
-        skillPath,
-        content,
-        frontMatter,
-      };
-    } catch {
-      // Try the next location.
-    }
+  const normalizedName = String(skillName || "");
+  if (!SKILL_NAME_PATTERN.test(normalizedName)) {
+    return null;
   }
 
-  return null;
+  const skillsRoot = path.resolve(skillsDir);
+  const skillPath = path.resolve(skillsRoot, normalizedName, SKILL_FILE_NAME);
+  if (!skillPath.startsWith(`${skillsRoot}${path.sep}`)) {
+    return null;
+  }
+
+  try {
+    const content = await fs.readFile(skillPath, "utf8");
+    const frontMatter = extractFrontMatter(content);
+    if (!frontMatter) {
+      return null;
+    }
+    return {
+      skillPath,
+      content,
+      frontMatter,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function listSkills(category, options = {}) {

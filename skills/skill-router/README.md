@@ -9,8 +9,8 @@ The Skill Router analyzes user requests and intelligently recommends the most ap
 ## Installation
 
 ```bash
-# Create symbolic link to global skills directory
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/skill-router/SKILL.md ~/.claude/skills/skill-router.md
+mkdir -p ~/.claude/skills
+ln -s ~/Documents/code/GitHub/agent-playbook/skills/skill-router ~/.claude/skills/skill-router
 ```
 
 ## How It Works

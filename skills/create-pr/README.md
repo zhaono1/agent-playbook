@@ -17,8 +17,8 @@ This skill streamlines the PR creation process for the agent-playbook repository
 ## Installation
 
 ```bash
-# Create symbolic link to global skills directory
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/create-pr/SKILL.md ~/.claude/skills/create-pr.md
+mkdir -p ~/.claude/skills
+ln -s ~/Documents/code/GitHub/agent-playbook/skills/create-pr ~/.claude/skills/create-pr
 ```
 
 ## Workflow

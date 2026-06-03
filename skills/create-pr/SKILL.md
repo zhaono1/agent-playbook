@@ -269,7 +269,7 @@ touch skills/new-skill/SKILL.md
 touch skills/new-skill/README.md
 
 # 2. Create symlink
-ln -s ~/path/to/agent-playbook/skills/new-skill/SKILL.md ~/.claude/skills/new-skill.md
+ln -s ~/path/to/agent-playbook/skills/new-skill ~/.claude/skills/new-skill
 
 # 3. Update README.md (add to skills table)
 # 4. Update README.zh-CN.md (add to skills table with translation)

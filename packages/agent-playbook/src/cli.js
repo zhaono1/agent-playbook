@@ -12,6 +12,10 @@ const LOCAL_CLI_DIR = "agent-playbook";
 const HOOK_SOURCE_VALUE = "agent-playbook";
 const STATE_FILE_NAME = "state.json";
 const DISABLED_DIR_NAME = ".disabled";
+const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const VALID_SKILL_SCOPES = new Set(["project", "global"]);
+const VALID_SKILL_TARGETS = new Set(["claude", "codex", "gemini"]);
+const VALID_INSTALL_MODES = new Set(["link", "copy"]);
 
 const packageJson = readJsonSafe(path.join(__dirname, "..", "package.json"));
 const VERSION = packageJson.version || "0.0.0";
@@ -335,7 +339,7 @@ async function handleSelfImprove(options) {
     writeJson(skillStatePath, skillState);
 
     // Create trigger file for skill chaining
-    createSkillTrigger(triggersDir, skillCompletion, sessionId, cwd, now);
+    createSkillTrigger(triggersDir, skillCompletion, sessionId, cwd, now, resolveRuntimeSkillsSource(cwd));
   }
 
   const entryPath = path.join(episodicDir, `${entry.id}.json`);
@@ -434,7 +438,7 @@ function detectSkillCompletion(toolName, toolInput, toolOutput, cwd) {
   return null;
 }
 
-function createSkillTrigger(triggersDir, completion, sessionId, cwd, now) {
+function createSkillTrigger(triggersDir, completion, sessionId, cwd, now, skillsSource) {
   const triggerFile = path.join(
     triggersDir,
     `${completion.skill}-${now.toISOString().replace(/[:.]/g, "-")}.json`
@@ -447,71 +451,141 @@ function createSkillTrigger(triggersDir, completion, sessionId, cwd, now) {
     session_id: sessionId,
     cwd,
     details: completion,
-    pending_triggers: getHooksForSkill(completion.skill, completion.type),
+    pending_triggers: getHooksForSkill(completion.skill, completion.type, skillsSource),
   };
 
   writeJson(triggerFile, trigger);
   console.error(`Skill trigger created: ${completion.skill} -> ${trigger.pending_triggers.map((t) => t.trigger).join(", ") || "none"}`);
 }
 
-function getHooksForSkill(skillName, completionType) {
-  // Define hooks based on skill completion
-  const hookDefinitions = {
-    "prd-planner": {
-      after_complete: [
-        { trigger: "self-improving-agent", mode: "background" },
-        { trigger: "session-logger", mode: "auto" },
-      ],
-    },
-    "prd-implementation-precheck": {
-      after_complete: [
-        { trigger: "code-reviewer", mode: "ask_first" },
-        { trigger: "self-improving-agent", mode: "background" },
-        { trigger: "session-logger", mode: "auto" },
-      ],
-    },
-    "commit-helper": {
-      after_complete: [{ trigger: "session-logger", mode: "auto" }],
-    },
-    "create-pr": {
-      after_complete: [{ trigger: "session-logger", mode: "auto" }],
-    },
-    "code-reviewer": {
-      after_complete: [
-        { trigger: "self-improving-agent", mode: "background" },
-        { trigger: "session-logger", mode: "auto" },
-      ],
-    },
-    "debugger": {
-      after_complete: [
-        { trigger: "self-improving-agent", mode: "background" },
-        { trigger: "session-logger", mode: "auto" },
-      ],
-    },
-    "refactoring-specialist": {
-      after_complete: [
-        { trigger: "self-improving-agent", mode: "background" },
-        { trigger: "session-logger", mode: "auto" },
-      ],
-    },
-    "test-automator": {
-      after_complete: [{ trigger: "session-logger", mode: "auto" }],
-    },
-    "self-improving-agent": {
-      after_complete: [
-        { trigger: "create-pr", mode: "ask_first", condition: "skills_modified" },
-        { trigger: "session-logger", mode: "auto" },
-      ],
-    },
-  };
+function getHooksForSkill(skillName, completionType, skillsSource) {
+  const hooks = readSkillHooks(skillName, skillsSource);
+  return hooks.after_complete || [];
+}
 
-  const hooks = hookDefinitions[skillName];
-  if (!hooks) {
-    return [];
+function resolveRuntimeSkillsSource(cwd) {
+  const repoRoot = findRepoRoot(cwd) || cwd;
+  return resolveSkillsSource([
+    repoRoot,
+    path.resolve(__dirname, ".."),
+    path.join(os.homedir(), ".claude"),
+    path.join(os.homedir(), ".codex"),
+  ]);
+}
+
+function readSkillHooks(skillName, skillsSource) {
+  if (!skillsSource || !isValidSkillName(skillName)) {
+    return {};
   }
 
-  // Return after_complete hooks by default
-  return hooks.after_complete || [];
+  const skillPath = resolveInside(skillsSource, skillName, "SKILL.md");
+  if (!skillPath || !fs.existsSync(skillPath)) {
+    return {};
+  }
+
+  const frontMatter = extractFrontMatterBlock(fs.readFileSync(skillPath, "utf8"));
+  if (!frontMatter) {
+    return {};
+  }
+
+  return parseHookFrontMatter(frontMatter);
+}
+
+function extractFrontMatterBlock(text) {
+  const match = String(text || "").match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+  return match ? match[1] : "";
+}
+
+function parseHookFrontMatter(frontMatter) {
+  const hooks = {};
+  const lines = String(frontMatter || "").split("\n");
+  let inMetadata = false;
+  let inHooks = false;
+  let currentEvent = "";
+  let currentItem = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+$/, "");
+    const trimmed = line.trim();
+    const indent = line.length - line.trimStart().length;
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    if (indent === 0) {
+      inMetadata = trimmed === "metadata:";
+      inHooks = trimmed === "hooks:";
+      currentEvent = "";
+      currentItem = null;
+      continue;
+    }
+
+    if (inMetadata && indent === 2) {
+      inHooks = trimmed === "hooks:";
+      currentEvent = "";
+      currentItem = null;
+      continue;
+    }
+
+    if (!inHooks) {
+      continue;
+    }
+
+    if ((inMetadata && indent === 4) || (!inMetadata && indent === 2)) {
+      const eventName = parseYamlKey(trimmed);
+      if (eventName) {
+        currentEvent = eventName;
+        hooks[currentEvent] = hooks[currentEvent] || [];
+        currentItem = null;
+      }
+      continue;
+    }
+
+    if (!currentEvent) {
+      continue;
+    }
+
+    const itemIndent = inMetadata ? 6 : 4;
+    const fieldIndent = itemIndent + 2;
+    if (indent === itemIndent && trimmed.startsWith("- ")) {
+      currentItem = {};
+      hooks[currentEvent].push(currentItem);
+      const inline = trimmed.slice(2).trim();
+      assignYamlField(currentItem, inline);
+      continue;
+    }
+
+    if (currentItem && indent >= fieldIndent) {
+      assignYamlField(currentItem, trimmed);
+    }
+  }
+
+  return hooks;
+}
+
+function parseYamlKey(text) {
+  const match = String(text || "").match(/^([A-Za-z0-9_-]+):\s*$/);
+  return match ? match[1] : "";
+}
+
+function assignYamlField(target, text) {
+  const match = String(text || "").match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+  if (!match) {
+    return;
+  }
+  target[match[1]] = stripYamlScalar(match[2]);
+}
+
+function stripYamlScalar(value) {
+  const text = String(value || "").trim();
+  if (
+    (text.startsWith('"') && text.endsWith('"')) ||
+    (text.startsWith("'") && text.endsWith("'"))
+  ) {
+    return text.slice(1, -1);
+  }
+  return text;
 }
 
 function handleSkills(options, positionals, context) {
@@ -856,6 +930,20 @@ function normalizeTargetList(targetValue, defaultTarget) {
   return { targets, warnings };
 }
 
+function isValidSkillName(name) {
+  return SKILL_NAME_PATTERN.test(String(name || ""));
+}
+
+function resolveInside(rootPath, ...segments) {
+  const root = path.resolve(rootPath);
+  const target = path.resolve(root, ...segments);
+  const relative = path.relative(root, target);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return null;
+  }
+  return target;
+}
+
 function resolveInstallMode(options, fallbackMode) {
   if (options && options.link) {
     return "link";
@@ -874,6 +962,23 @@ function createEmptyState() {
   };
 }
 
+function normalizeStateEntry(entry) {
+  if (
+    !entry ||
+    !isValidSkillName(entry.name) ||
+    !VALID_SKILL_SCOPES.has(entry.scope) ||
+    !VALID_SKILL_TARGETS.has(entry.target)
+  ) {
+    return null;
+  }
+
+  const normalized = { ...entry };
+  if (normalized.mode && !VALID_INSTALL_MODES.has(normalized.mode)) {
+    delete normalized.mode;
+  }
+  return normalized;
+}
+
 function loadStateFile(statePath) {
   if (!fs.existsSync(statePath)) {
     return createEmptyState();
@@ -883,9 +988,9 @@ function loadStateFile(statePath) {
     if (!parsed || typeof parsed !== "object") {
       throw new Error("Invalid state file");
     }
-    if (!Array.isArray(parsed.skills)) {
-      parsed.skills = [];
-    }
+    parsed.skills = Array.isArray(parsed.skills)
+      ? parsed.skills.map(normalizeStateEntry).filter(Boolean)
+      : [];
     if (!parsed.version) {
       parsed.version = "1";
     }
@@ -914,7 +1019,7 @@ function stateKey(name, scope, target) {
 function indexStateEntries(state) {
   const map = new Map();
   (state.skills || []).forEach((entry) => {
-    if (!entry || !entry.name) {
+    if (!normalizeStateEntry(entry)) {
       return;
     }
     map.set(stateKey(entry.name, entry.scope, entry.target), entry);
@@ -947,7 +1052,11 @@ function resolveSkillInput(input, env) {
     if (!fs.existsSync(skillFile)) {
       return { error: `SKILL.md not found in ${skillDir}` };
     }
-    return { name: path.basename(skillDir), sourceDir: skillDir, kind: "path" };
+    const name = path.basename(skillDir);
+    if (!isValidSkillName(name)) {
+      return { error: `Invalid skill name "${name}". Use lowercase kebab-case.` };
+    }
+    return { name, sourceDir: skillDir, kind: "path" };
   }
 
   const skillsSource = env.skillsSource;
@@ -955,7 +1064,14 @@ function resolveSkillInput(input, env) {
     return { error: "No bundled skills directory found. Use a local path instead." };
   }
 
-  const candidate = path.join(skillsSource, input);
+  if (!isValidSkillName(input)) {
+    return { error: `Invalid skill name "${input}". Use lowercase kebab-case.` };
+  }
+
+  const candidate = resolveInside(skillsSource, input);
+  if (!candidate) {
+    return { error: `Invalid skill name "${input}". Use lowercase kebab-case.` };
+  }
   if (!fs.existsSync(path.join(candidate, "SKILL.md"))) {
     const available = listBuiltInSkills(skillsSource);
     const sample = available.length ? ` Available: ${available.join(", ")}` : "";
@@ -1804,11 +1920,15 @@ function handleSkillsUpgrade(options, args, settings) {
       skipped += 1;
       return;
     }
-    const activePath = path.join(root, entry.name);
+    const activePath = resolveInside(root, entry.name);
+    if (!activePath) {
+      skipped += 1;
+      return;
+    }
     let sourceDir = entry.source;
     if (sourceRoot) {
-      const candidate = path.join(sourceRoot, entry.name);
-      if (fs.existsSync(path.join(candidate, "SKILL.md"))) {
+      const candidate = resolveInside(sourceRoot, entry.name);
+      if (candidate && fs.existsSync(path.join(candidate, "SKILL.md"))) {
         sourceDir = candidate;
       }
     }
@@ -1892,17 +2012,29 @@ function handleSkillsImport(options, args, settings) {
   const state = {
     version: imported.version || "1",
     updated_at: now,
-    skills: skills,
+    skills: [],
   };
 
   let applied = 0;
   let skipped = 0;
   skills.forEach((entry) => {
-    if (!entry || !entry.name || !entry.scope || !entry.target) {
+    if (
+      !entry ||
+      !isValidSkillName(entry.name) ||
+      !VALID_SKILL_SCOPES.has(entry.scope) ||
+      !VALID_SKILL_TARGETS.has(entry.target)
+    ) {
       skipped += 1;
       return;
     }
+
+    const stateEntry = { ...entry };
+    if (stateEntry.mode && !VALID_INSTALL_MODES.has(stateEntry.mode)) {
+      stateEntry.mode = defaultMode;
+    }
+
     if (entry.disabled) {
+      state.skills.push(stateEntry);
       return;
     }
     const dirs = env.scopeDirs[entry.scope];
@@ -1915,11 +2047,15 @@ function handleSkillsImport(options, args, settings) {
       skipped += 1;
       return;
     }
-    const targetPath = path.join(root, entry.name);
+    const targetPath = resolveInside(root, entry.name);
+    if (!targetPath) {
+      skipped += 1;
+      return;
+    }
     let sourceDir = entry.source;
     if (options.source) {
-      const candidate = path.join(path.resolve(options.source), entry.name);
-      if (fs.existsSync(path.join(candidate, "SKILL.md"))) {
+      const candidate = resolveInside(path.resolve(options.source), entry.name);
+      if (candidate && fs.existsSync(path.join(candidate, "SKILL.md"))) {
         sourceDir = candidate;
       }
     }
@@ -1937,10 +2073,11 @@ function handleSkillsImport(options, args, settings) {
       }
     }
     installSkill(sourceDir, targetPath, {
-      mode: entry.mode || defaultMode,
+      mode: stateEntry.mode || defaultMode,
       dryRun: options["dry-run"],
     });
-    entry.updated_at = now;
+    stateEntry.updated_at = now;
+    state.skills.push(stateEntry);
     applied += 1;
   });
 
@@ -1989,7 +2126,7 @@ function updateClaudeSettings(settings, cliPath, options) {
   sessionCommand = `${sessionCommand} --hook-source ${HOOK_SOURCE_VALUE}`;
   if (options["session-dir"]) {
     const sessionDir = path.resolve(options["session-dir"]);
-    sessionCommand = `${sessionCommand} --session-dir \"${sessionDir}\"`;
+    sessionCommand = `${sessionCommand} --session-dir ${shellQuote(sessionDir)}`;
   }
   const improveCommand = `${buildHookCommand(cliPath, "self-improve")} --hook-source ${HOOK_SOURCE_VALUE}`;
 
@@ -2128,8 +2265,15 @@ function removeCodexBlock(content) {
 }
 
 function buildHookCommand(cliPath, subcommand) {
-  const quoted = cliPath.includes(" ") ? `\"${cliPath}\"` : cliPath;
-  return `${quoted} ${subcommand}`;
+  return `${shellQuote(cliPath)} ${subcommand}`;
+}
+
+function shellQuote(value) {
+  const text = String(value || "");
+  if (!text) {
+    return "''";
+  }
+  return `'${text.replace(/'/g, "'\\''")}'`;
 }
 
 function resolveSessionDir(explicit, cwd) {
@@ -2506,17 +2650,17 @@ function printInitSummary(settings, hooksEnabled, options, claudeLinks, codexLin
 function uniqueList(items, limit) {
   const seen = new Set();
   const result = [];
-  items.forEach((item) => {
+  for (const item of items) {
     const value = String(item || "").trim();
     if (!value || seen.has(value)) {
-      return;
+      continue;
     }
     seen.add(value);
     result.push(value);
     if (limit && result.length >= limit) {
-      return;
+      break;
     }
-  });
+  }
   return result;
 }
 

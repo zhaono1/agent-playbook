@@ -31,6 +31,7 @@
 延伸阅读：
 
 - [Agent Playbook 的上下文分层](./docs/context-layering-for-agent-playbooks.md)
+- [Skill 生态参考](./docs/skill-ecosystem-references.md)
 - [long-task-coordinator](./skills/long-task-coordinator/)
 
 ## 适合谁使用
@@ -62,10 +63,13 @@ pnpm dlx @codeharbor/agent-playbook init --project
 将技能链接到全局技能目录：
 
 ```bash
-# 为每个技能创建符号链接
-ln -s /path/to/agent-playbook/skills/* ~/.claude/skills/
-ln -s /path/to/agent-playbook/skills/* ~/.codex/skills/
-ln -s /path/to/agent-playbook/skills/* ~/.gemini/skills/
+mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills
+for skill in /path/to/agent-playbook/skills/*; do
+  [ -f "$skill/SKILL.md" ] || continue
+  ln -s "$skill" ~/.claude/skills/
+  ln -s "$skill" ~/.codex/skills/
+  ln -s "$skill" ~/.gemini/skills/
+done
 ```
 
 示例：
@@ -82,9 +86,13 @@ ln -s ~/Documents/code/GitHub/agent-playbook/skills/planning-with-files ~/.claud
 直接将技能复制到全局技能目录：
 
 ```bash
-cp -r /path/to/agent-playbook/skills/* ~/.claude/skills/
-cp -r /path/to/agent-playbook/skills/* ~/.codex/skills/
-cp -r /path/to/agent-playbook/skills/* ~/.gemini/skills/
+mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills
+for skill in /path/to/agent-playbook/skills/*; do
+  [ -f "$skill/SKILL.md" ] || continue
+  cp -R "$skill" ~/.claude/skills/
+  cp -R "$skill" ~/.codex/skills/
+  cp -R "$skill" ~/.gemini/skills/
+done
 ```
 
 ### 方法三：添加到项目特定技能
@@ -93,9 +101,12 @@ cp -r /path/to/agent-playbook/skills/* ~/.gemini/skills/
 
 ```bash
 mkdir -p .claude/skills .codex/skills .gemini/skills
-cp -r /path/to/agent-playbook/skills/* .claude/skills/
-cp -r /path/to/agent-playbook/skills/* .codex/skills/
-cp -r /path/to/agent-playbook/skills/* .gemini/skills/
+for skill in /path/to/agent-playbook/skills/*; do
+  [ -f "$skill/SKILL.md" ] || continue
+  cp -R "$skill" .claude/skills/
+  cp -R "$skill" .codex/skills/
+  cp -R "$skill" .gemini/skills/
+done
 ```
 
 ### 验证安装
@@ -307,9 +318,10 @@ cp -r /path/to/agent-playbook/skills/* ~/.claude/skills/
 6. 为技能加入明确的验收标准，让完成条件清晰
 7. 在可行时，为新技能补轻量 eval prompts 或场景检查
 8. 参考 [Anthropic 官方 skill-creator](https://github.com/anthropics/skills/tree/main/skills/skill-creator) 的结构与规范
-9. 在需要中英文同步时，同时更新 README.md 和 README.zh-CN.md
-10. 验证技能结构：`python3 scripts/validate_skills.py`
-11. 可选：运行 skills-ref 校验：`python3 -m pip install "git+https://github.com/agentskills/agentskills.git@main#subdirectory=skills-ref" && skills-ref validate skills/<name>`
+9. 新增 skill 基础设施前，先查看 [Skill 生态参考](./docs/skill-ecosystem-references.md)
+10. 在需要中英文同步时，同时更新 README.md 和 README.zh-CN.md
+11. 验证技能结构：`python3 scripts/validate_skills.py`
+12. 可选：运行 skills-ref 校验：`python3 -m pip install "git+https://github.com/agentskills/agentskills.git@main#subdirectory=skills-ref" && skills-ref validate skills/<name>`
 
 ## 许可证
 

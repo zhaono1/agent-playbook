@@ -29,6 +29,7 @@ The repository is evolving around a few portable agent design rules:
 Further reading:
 
 - [Context Layering for Agent Playbooks](./docs/context-layering-for-agent-playbooks.md)
+- [Skill Ecosystem References](./docs/skill-ecosystem-references.md)
 - [long-task-coordinator](./skills/long-task-coordinator/)
 
 ## Who this is for
@@ -60,10 +61,13 @@ pnpm dlx @codeharbor/agent-playbook init --project
 Link the skills to your global skills directories:
 
 ```bash
-# Create symbolic links for each skill
-ln -s /path/to/agent-playbook/skills/* ~/.claude/skills/
-ln -s /path/to/agent-playbook/skills/* ~/.codex/skills/
-ln -s /path/to/agent-playbook/skills/* ~/.gemini/skills/
+mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills
+for skill in /path/to/agent-playbook/skills/*; do
+  [ -f "$skill/SKILL.md" ] || continue
+  ln -s "$skill" ~/.claude/skills/
+  ln -s "$skill" ~/.codex/skills/
+  ln -s "$skill" ~/.gemini/skills/
+done
 ```
 
 Example:
@@ -80,9 +84,13 @@ ln -s ~/Documents/code/GitHub/agent-playbook/skills/planning-with-files ~/.claud
 Copy the skills directly to your global skills directories:
 
 ```bash
-cp -r /path/to/agent-playbook/skills/* ~/.claude/skills/
-cp -r /path/to/agent-playbook/skills/* ~/.codex/skills/
-cp -r /path/to/agent-playbook/skills/* ~/.gemini/skills/
+mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills
+for skill in /path/to/agent-playbook/skills/*; do
+  [ -f "$skill/SKILL.md" ] || continue
+  cp -R "$skill" ~/.claude/skills/
+  cp -R "$skill" ~/.codex/skills/
+  cp -R "$skill" ~/.gemini/skills/
+done
 ```
 
 ### Method 3: Add to Project-Specific Skills
@@ -91,9 +99,12 @@ For project-specific usage, create `.claude/.codex/.gemini` skills directories i
 
 ```bash
 mkdir -p .claude/skills .codex/skills .gemini/skills
-cp -r /path/to/agent-playbook/skills/* .claude/skills/
-cp -r /path/to/agent-playbook/skills/* .codex/skills/
-cp -r /path/to/agent-playbook/skills/* .gemini/skills/
+for skill in /path/to/agent-playbook/skills/*; do
+  [ -f "$skill/SKILL.md" ] || continue
+  cp -R "$skill" .claude/skills/
+  cp -R "$skill" .codex/skills/
+  cp -R "$skill" .gemini/skills/
+done
 ```
 
 ### Verify Installation
@@ -305,9 +316,10 @@ When contributing skills:
 6. Add explicit acceptance criteria so the skill has a clear definition of done
 7. Add lightweight eval prompts or scenario checks for new skills when practical
 8. Follow the structure and guidance from [Anthropic's skill-creator](https://github.com/anthropics/skills/tree/main/skills/skill-creator)
-9. Update both README.md and README.zh-CN.md when bilingual parity is part of the change
-10. Validate skill structure: `python3 scripts/validate_skills.py`
-11. Optional: run skills-ref validation: `python3 -m pip install "git+https://github.com/agentskills/agentskills.git@main#subdirectory=skills-ref" && skills-ref validate skills/<name>`
+9. Check [Skill Ecosystem References](./docs/skill-ecosystem-references.md) before adding new skill infrastructure
+10. Update both README.md and README.zh-CN.md when bilingual parity is part of the change
+11. Validate skill structure: `python3 scripts/validate_skills.py`
+12. Optional: run skills-ref validation: `python3 -m pip install "git+https://github.com/agentskills/agentskills.git@main#subdirectory=skills-ref" && skills-ref validate skills/<name>`
 
 ## License
 

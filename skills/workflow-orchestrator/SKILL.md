@@ -283,7 +283,7 @@ Log what was triggered and the result:
 |-------|----------------|
 | `prd-planner` | self-improving-agent, session-logger |
 | `self-improving-agent` | create-pr, session-logger |
-| `prd-implementation-precheck` | code-reviewer, session-logger |
+| `prd-implementation-precheck` | self-improving-agent, session-logger |
 | `code-reviewer` | self-improving-agent, session-logger |
 | `create-pr` | session-logger |
 | `refactoring-specialist` | self-improving-agent, session-logger |

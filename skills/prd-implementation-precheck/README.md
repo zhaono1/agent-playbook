@@ -13,8 +13,8 @@ Instead of blindly implementing a PRD, this skill:
 ## Installation
 
 ```bash
-# Create symbolic link to global skills directory
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/prd-implementation-precheck/SKILL.md ~/.claude/skills/prd-implementation-precheck.md
+mkdir -p ~/.claude/skills
+ln -s ~/Documents/code/GitHub/agent-playbook/skills/prd-implementation-precheck ~/.claude/skills/prd-implementation-precheck
 ```
 
 ## Usage

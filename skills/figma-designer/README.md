@@ -11,7 +11,8 @@ This skill analyzes Figma designs through the Figma MCP server and generates det
 The skill should be symbolically linked to your Claude Code skills directory:
 
 ```bash
-ln -s ~/agent-playbook/skills/figma-designer/SKILL.md ~/.claude/skills/figma-designer.md
+mkdir -p ~/.claude/skills
+ln -s ~/agent-playbook/skills/figma-designer ~/.claude/skills/figma-designer
 ```
 
 ## Prerequisites

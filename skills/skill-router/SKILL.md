@@ -24,6 +24,17 @@ This skill activates when you:
 
 ## Available Skills Catalog
 
+### Meta & Workflow
+
+| Skill | Best For |
+|-------|----------|
+| `skill-router` | Finding and selecting the right skill for a task |
+| `create-pr` | Creating pull requests with bilingual documentation checks |
+| `session-logger` | Saving session summaries and activity logs |
+| `workflow-orchestrator` | Coordinating multi-skill workflows and triggers |
+| `self-improving-agent` | Learning from completed skill workflows |
+| `auto-trigger` | Declaring trigger relationships between skills |
+
 ### Core Development
 
 | Skill | Best For |
@@ -32,12 +43,6 @@ This skill activates when you:
 | `code-reviewer` | Reviewing PRs, code changes, quality checks |
 | `debugger` | Diagnosing bugs, errors, unexpected behavior |
 | `refactoring-specialist` | Improving code structure, reducing technical debt |
-
-### Design & UX
-
-| Skill | Best For |
-|-------|----------|
-| `figma-designer` | Analyzing Figma designs and producing implementation-ready visual specs/PRDs |
 
 ### Documentation & Testing
 
@@ -61,10 +66,17 @@ This skill activates when you:
 
 | Skill | Best For |
 |-------|----------|
-| `architecting-solutions` | Creating PRDs, solution design, requirements analysis |
+| `prd-planner` | Creating PRDs with persistent file-based planning |
+| `prd-implementation-precheck` | Prechecking PRDs/specs before implementation |
+| `architecting-solutions` | Non-PRD solution design, architecture, and requirements analysis |
 | `planning-with-files` | Multi-step task planning, persistent file-based organization |
 | `long-task-coordinator` | Multi-session, delegated, or resumable work that needs explicit state and recovery |
-| `self-improving-agent` | Universal self-improvement that learns from all skill experiences |
+
+### Design & UX
+
+| Skill | Best For |
+|-------|----------|
+| `figma-designer` | Analyzing Figma designs and producing implementation-ready visual specs/PRDs |
 
 ## Routing Process
 

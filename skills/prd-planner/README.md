@@ -28,8 +28,8 @@ docs/{scope}-tech.md          → Technical design output
 ## Installation
 
 ```bash
-# Create symbolic link to global skills directory
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/prd-planner/SKILL.md ~/.claude/skills/prd-planner.md
+mkdir -p ~/.claude/skills
+ln -s ~/Documents/code/GitHub/agent-playbook/skills/prd-planner ~/.claude/skills/prd-planner
 ```
 
 ## Usage

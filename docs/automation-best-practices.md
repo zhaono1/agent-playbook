@@ -140,22 +140,25 @@ Plan → Execute → Review → Adjust
 ### 钩子实现
 
 ```yaml
-# 在 SKILL.md 中定义钩子
-hooks:
-  before_start:
-    - check: prerequisites_exist
-    - create: working_files
+# 在 SKILL.md frontmatter 中定义钩子
+metadata:
+  hooks:
+    before_start:
+      - check: prerequisites_exist
+      - create: working_files
 
-  after_complete:
-    - trigger: self-improving-agent
-      mode: background
-    - trigger: session-logger
-      mode: auto
+    after_complete:
+      - trigger: self-improving-agent
+        mode: background
+      - trigger: session-logger
+        mode: auto
 
-  on_error:
-    - save: error_state
-    - notify: user
+    on_error:
+      - save: error_state
+      - notify: user
 ```
+
+`metadata.hooks` 是技能链路的单一来源。CLI、orchestrator、doctor 只能读取它，不应维护另一份硬编码 hook 映射。
 
 ---
 
@@ -216,12 +219,13 @@ hooks:
 name: prd-planner
 description: Creates PRDs using persistent file-based planning
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion, WebSearch
-hooks:
-  after_complete:
-    - trigger: self-improving-agent
-      mode: background
-    - trigger: session-logger
-      mode: auto
+metadata:
+  hooks:
+    after_complete:
+      - trigger: self-improving-agent
+        mode: background
+      - trigger: session-logger
+        mode: auto
 ---
 ```
 

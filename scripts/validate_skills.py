@@ -4,13 +4,21 @@ import re
 import sys
 from pathlib import Path
 
-SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SKILLS_DIR = REPO_ROOT / "skills"
 IGNORE_DIRS = {"reference"}
 MAX_SKILL_LINES = 500
 CATALOG_PATH = SKILLS_DIR / "catalog.json"
+README_PATHS = (REPO_ROOT / "README.md", REPO_ROOT / "README.zh-CN.md")
+ROUTER_PATH = SKILLS_DIR / "skill-router" / "SKILL.md"
 
 NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 REF_PATTERN = re.compile(r"(scripts|references|assets|hooks)/[^\s`\"']+")
+SKILL_LINK_PATTERN = re.compile(r"\]\(\./skills/([^/)]+)/?\)")
+ROUTER_CATALOG_PATTERN = re.compile(
+    r"## Available Skills Catalog\n(?P<body>[\s\S]*?)\n## Routing Process"
+)
+ROUTER_SKILL_PATTERN = re.compile(r"^\|\s*`([^`]+)`\s*\|", re.MULTILINE)
 
 
 def load_front_matter(text: str):
@@ -29,10 +37,51 @@ def load_front_matter(text: str):
     return front_matter
 
 
+def validate_readme_skill_links(readme_path: Path, skill_names: set[str]) -> list[str]:
+    if not readme_path.exists():
+        return [f"Missing README: {readme_path}"]
+
+    text = readme_path.read_text(encoding="utf-8", errors="ignore")
+    linked_skills = set(SKILL_LINK_PATTERN.findall(text))
+    missing = sorted(skill_names - linked_skills)
+    extra = sorted(linked_skills - skill_names)
+    errors = []
+
+    if missing:
+        errors.append(f"README missing skill links: {readme_path} -> {', '.join(missing)}")
+    if extra:
+        errors.append(f"README links unknown skills: {readme_path} -> {', '.join(extra)}")
+
+    return errors
+
+
+def validate_router_catalog(router_path: Path, skill_names: set[str]) -> list[str]:
+    if not router_path.exists():
+        return [f"Missing skill-router catalog source: {router_path}"]
+
+    text = router_path.read_text(encoding="utf-8", errors="ignore")
+    match = ROUTER_CATALOG_PATTERN.search(text)
+    if not match:
+        return [f"Missing Available Skills Catalog section: {router_path}"]
+
+    router_skills = set(ROUTER_SKILL_PATTERN.findall(match.group("body")))
+    missing = sorted(skill_names - router_skills)
+    extra = sorted(router_skills - skill_names)
+    errors = []
+
+    if missing:
+        errors.append(f"skill-router catalog missing skills: {', '.join(missing)}")
+    if extra:
+        errors.append(f"skill-router catalog lists unknown skills: {', '.join(extra)}")
+
+    return errors
+
+
 def main() -> int:
     errors = []
     catalog_entries = {}
     catalog_seen = {}
+    skill_names = set()
 
     if not CATALOG_PATH.exists():
         errors.append(f"Missing catalog: {CATALOG_PATH}")
@@ -78,6 +127,8 @@ def main() -> int:
             errors.append(f"Missing SKILL.md: {skill_dir}")
             continue
 
+        skill_names.add(skill_dir.name)
+
         if catalog_entries:
             if skill_dir.name not in catalog_entries:
                 errors.append(f"Skill missing from catalog: {skill_dir.name}")
@@ -121,6 +172,10 @@ def main() -> int:
     for skill_name, seen in catalog_seen.items():
         if not seen:
             errors.append(f"Catalog references missing skill: {skill_name}")
+
+    for readme_path in README_PATHS:
+        errors.extend(validate_readme_skill_links(readme_path, skill_names))
+    errors.extend(validate_router_catalog(ROUTER_PATH, skill_names))
 
     if errors:
         print("Skill validation failed:")

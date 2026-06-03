@@ -65,3 +65,80 @@ test("session-log writes summary with commands and questions", () => {
     new RegExp(`\\*\\*Agent Playbook Version\\*\\*: ${packageVersion.replace(/\./g, "\\.")}`)
   );
 });
+
+test("session-log limits repeated transcript details", () => {
+  const tempDir = makeTempDir();
+  const transcriptPath = path.join(tempDir, "transcript.jsonl");
+  const sessionDir = path.join(tempDir, "sessions");
+  const commands = Array.from({ length: 20 }, (_, index) => `echo command-${index}`);
+
+  const events = [
+    { role: "user", content: "Summarize this long session" },
+    {
+      role: "assistant",
+      content: `Run:\n\`\`\`bash\n${commands.join("\n")}\n\`\`\``,
+    },
+  ];
+
+  fs.writeFileSync(transcriptPath, events.map((event) => JSON.stringify(event)).join("\n"));
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "session-log",
+      "--transcript-path",
+      transcriptPath,
+      "--cwd",
+      tempDir,
+      "--session-dir",
+      sessionDir,
+    ],
+    { encoding: "utf8", input: "" }
+  );
+
+  assert.strictEqual(result.status, 0);
+
+  const files = fs.readdirSync(sessionDir).filter((file) => file.endsWith(".md"));
+  assert.strictEqual(files.length, 1);
+
+  const content = fs.readFileSync(path.join(sessionDir, files[0]), "utf8");
+  assert.match(content, /Commands detected: 12/);
+  assert.match(content, /echo command-11/);
+  assert.doesNotMatch(content, /echo command-12/);
+});
+
+test("self-improve reads skill hooks from front matter", () => {
+  const tempDir = makeTempDir();
+  const homeDir = path.join(tempDir, "home");
+  const repoRoot = path.resolve(__dirname, "..", "..", "..");
+  const input = JSON.stringify({
+    session_id: "test-session",
+    cwd: repoRoot,
+    tool_name: "Write",
+    tool_input: { file_path: path.join(tempDir, "feature-prd.md") },
+    tool_output: "Phase 6 COMPLETE",
+  });
+
+  const result = spawnSync(process.execPath, [binPath, "self-improve"], {
+    encoding: "utf8",
+    input,
+    env: {
+      ...process.env,
+      HOME: homeDir,
+    },
+  });
+
+  assert.strictEqual(result.status, 0);
+
+  const triggersDir = path.join(homeDir, ".claude", "memory", "triggers");
+  const triggerFiles = fs.readdirSync(triggersDir).filter((file) => file.endsWith(".json"));
+  assert.strictEqual(triggerFiles.length, 1);
+
+  const trigger = JSON.parse(fs.readFileSync(path.join(triggersDir, triggerFiles[0]), "utf8"));
+  assert.strictEqual(trigger.source_skill, "prd-planner");
+  assert.deepEqual(
+    trigger.pending_triggers.map((item) => item.reason),
+    ["Extract patterns and improve PRD quality", "Save session context"]
+  );
+});
