@@ -42,7 +42,7 @@ def main() -> int:
         ## Findings
         | Severity | Issue | Impact | Recommendation |
         | --- | --- | --- | --- |
-        | High | TBD | TBD | TBD |
+        | None yet | Add validated findings here | TBD | TBD |
 
         ## Remediation Plan
         - Immediate fixes

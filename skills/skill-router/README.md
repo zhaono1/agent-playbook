@@ -1,6 +1,6 @@
 # Skill Router
 
-An intelligent routing layer for Claude Code skills that helps users find the right skill for their task.
+An intelligent routing layer for agent-playbook skills that helps users find the right skill for their task.
 
 ## Overview
 
@@ -9,8 +9,7 @@ The Skill Router analyzes user requests and intelligently recommends the most ap
 ## Installation
 
 ```bash
-mkdir -p ~/.claude/skills
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/skill-router ~/.claude/skills/skill-router
+apb skills add ./skills/skill-router --scope global --target all --link
 ```
 
 ## How It Works
@@ -74,10 +73,12 @@ Shall we start with api-designer?
 
 | Category | Skills |
 |----------|--------|
+| **Meta & Workflow** | skill-router, create-pr, session-logger, workflow-orchestrator, self-improving-agent, auto-trigger |
 | **Core Development** | commit-helper, code-reviewer, debugger, refactoring-specialist |
 | **Documentation & Testing** | documentation-engineer, api-documenter, test-automator, qa-expert |
 | **Architecture & DevOps** | api-designer, security-auditor, performance-engineer, deployment-engineer |
-| **Planning & Analysis** | architecting-solutions, planning-with-files, long-task-coordinator, self-improving-agent |
+| **Planning & Analysis** | prd-planner, prd-implementation-precheck, architecting-solutions, planning-with-files, long-task-coordinator |
+| **Design & Creative** | figma-designer |
 
 ## Features
 

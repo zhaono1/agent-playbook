@@ -147,7 +147,7 @@ Monitor metrics, then:
 # Production
 NODE_ENV=production
 DATABASE_URL=postgresql://...
-API_KEY=sk-...
+API_KEY=${API_KEY}
 SENTRY_DSN=https://example.com/123
 
 # Development

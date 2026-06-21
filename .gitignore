@@ -1,4 +1,4 @@
-# Session logs - conversation history with Claude
+# Session logs - agent conversation history
 # Each session is stored in sessions/ directory with timestamp
 sessions/
 *.session.md

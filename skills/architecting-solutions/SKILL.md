@@ -15,12 +15,12 @@ metadata:
 
 # Architecting Solutions
 
-Analyzes requirements and creates detailed PRD documents for software implementation.
+Analyzes requirements and creates technical solution documents for software implementation.
 
 ## Description
 
 Use this skill when you need to:
-- Create PRD documents
+- Create non-PRD solution briefs or technical design documents
 - Design software solutions
 - Analyze requirements
 - Specify features
@@ -29,7 +29,7 @@ Use this skill when you need to:
 
 ## Installation
 
-This skill is typically installed globally at `~/.claude/skills/architecting-solutions/`.
+Install through `apb skills add ./skills/architecting-solutions --scope global --target all --link` when possible.
 
 ## How It Works
 
@@ -38,9 +38,9 @@ The skill guides Claude through a structured workflow:
 1. **Clarify requirements** - Ask targeted questions to understand the problem
 2. **Analyze context** - Review existing codebase for patterns and constraints
 3. **Design solution** - Propose architecture with trade-offs considered
-4. **Generate PRD** - Output markdown PRD to `{PROJECT_ROOT}/docs/` directory
+4. **Generate solution doc** - Output a markdown solution brief or technical design to `{PROJECT_ROOT}/docs/`
 
-**IMPORTANT**: Always write PRD to the project's `docs/` folder, never to plan files or hidden locations.
+**IMPORTANT**: Use `prd-planner` when the user asks for a PRD. This skill writes non-PRD architecture and solution artifacts to the project's `docs/` folder.
 
 ## Workflow
 
@@ -53,7 +53,7 @@ Requirements Analysis:
 - [ ] Step 3: Analyze existing codebase patterns
 - [ ] Step 4: Research best practices (if needed)
 - [ ] Step 5: Design solution architecture
-- [ ] Step 6: Generate PRD document (must be in {PROJECT_ROOT}/docs/)
+- [ ] Step 6: Generate solution document (must be in {PROJECT_ROOT}/docs/)
 - [ ] Step 7: Validate with user
 ```
 
@@ -149,7 +149,7 @@ Option 3 (Comprehensive): Migrate to a centralized state-store pattern
   - Time: 2-3 days
 ```
 
-**Ask user BEFORE writing PRD:**
+**Ask user BEFORE writing the solution document:**
 - Which option do you prefer?
 - Are you open to larger refactoring?
 - What's your tolerance for change?
@@ -171,27 +171,27 @@ For each major decision, document:
 | Approach A | Pro1, Pro2 | Con1 | ✓ |
 | Approach B | Pro1 | Con1, Con2 | |
 
-## Step 6: Generate PRD Document
+## Step 6: Generate Solution Document
 
-**IMPORTANT**: Always write PRD to the project's `docs/` directory, never to plan files or hidden locations.
+**IMPORTANT**: Always write the solution document to the project's `docs/` directory, never to plan files or hidden locations. Use `prd-planner` instead when the requested artifact is a PRD.
 
-Output location: `{PROJECT_ROOT}/docs/{feature-name}-prd.md`
+Output location: `{PROJECT_ROOT}/docs/{feature-name}-solution.md`
 
 Example:
-- If project root is `/Users/user/my-project/`, write to `/Users/user/my-project/docs/feature-name-prd.md`
-- Use kebab-case for filename: `data-refresh-logic-refactoring-prd.md`
+- If project root is `/Users/user/my-project/`, write to `/Users/user/my-project/docs/feature-name-solution.md`
+- Use kebab-case for filename: `data-refresh-logic-refactoring-solution.md`
 
 ## Step 7: Validate with User
 
 Before finalizing:
 1. **Review success criteria** - Do they align with user goals?
 2. **Check constraints** - Are all constraints addressed?
-3. **Verify completeness** - Can another agent implement from this PRD?
+3. **Verify completeness** - Can another agent implement from this solution document?
 4. **Confirm with user** - Get explicit approval before finalizing
 
 ---
 
-# PRD Quality Checklist
+# Solution Quality Checklist
 
 ## Content Quality
 
@@ -320,7 +320,7 @@ For bugs and refresh issues, ALWAYS verify:
 ## The Problem with Jumping to Complex Solutions
 
 **Real Case Study:**
-- **PRD Proposed**: Full shared state-store migration (10+ files, 2-3 days)
+- **Initial solution proposed**: Full shared state-store migration (10+ files, 2-3 days)
 - **Actual Solution**: Hook into existing pending request count decrease (1-2 files, 1 hour)
 - **Lesson**: Always look for the simplest solution first
 
@@ -331,7 +331,7 @@ For bugs and refresh issues, ALWAYS verify:
 - ❌ Multiple new files when one file change could suffice
 - ❌ "Best practice" justification without considering practicality
 
-## Questions to Ask Before Writing PRD
+## Questions to Ask Before Writing a Solution
 
 1. **Is there an existing mechanism that does 80% of what we need?**
 2. **Can we extend/modify existing code instead of creating new patterns?**
@@ -395,12 +395,12 @@ For bugs and refresh issues, ALWAYS verify:
 
 # Reference Materials
 
-- **PRD Template**: Look at existing PRDs in the project's `docs/` folder
+- **Solution Template**: Look at existing architecture or solution docs in the project's `docs/` folder
 - **Similar Implementations**: Reference similar features/modules in the codebase
 
 ---
 
-# Tips for Effective PRDs
+# Tips for Effective Solution Documents
 
 1. **Be Specific**: "Improve performance" → "Reduce API response time from 2s to 500ms"
 2. **Show Context**: Explain why a decision was made, not just what was decided
@@ -413,7 +413,7 @@ For bugs and refresh issues, ALWAYS verify:
 
 ---
 
-## Accuracy & Completeness (Critical Lessons from Real PRD Reviews)
+## Accuracy & Completeness (Critical Lessons from Real Solution Reviews)
 
 ### Technical Terms - Be Precise
 
@@ -454,7 +454,7 @@ Draw out the timeline:
 
 This shows WHY it doesn't work.
 
-### Common PRD Mistakes
+### Common Solution Mistakes
 
 | Mistake | Example | Fix |
 |---------|---------|-----|

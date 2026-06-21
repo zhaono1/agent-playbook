@@ -8,30 +8,23 @@ This skill analyzes Figma designs through the Figma MCP server and generates det
 
 ## Installation
 
-The skill should be symbolically linked to your Claude Code skills directory:
+Install through the package CLI when possible:
 
 ```bash
-mkdir -p ~/.claude/skills
-ln -s ~/agent-playbook/skills/figma-designer ~/.claude/skills/figma-designer
+apb skills add ./skills/figma-designer --scope global --target all --link
 ```
 
 ## Prerequisites
 
 ### Figma MCP Server
 
-Ensure the Figma MCP server is connected and accessible:
+Ensure the host exposes a Figma MCP server or plugin. Tool names vary by host
+and plugin version, so inspect the available Figma tools in the current session
+instead of assuming fixed names. The required capability set is:
 
-```bash
-# Check if Figma MCP is available
-mcp-list
-```
-
-If not available, install from: https://github.com/modelcontextprotocol/servers
-
-Required Figma MCP tools:
-- `figma_get_file` - Get file metadata
-- `figma_get_nodes` - Get node details
-- `figma_get_components` - Get component information
+- Read file or page metadata
+- Read selected nodes or node details
+- Read component and style information when available
 
 ### Figma Access Token
 
@@ -52,7 +45,7 @@ Provide a Figma link or ask to analyze a design:
 You: Analyze this Figma design: https://www.figma.com/file/abc123/My-Design
 ```
 
-The skill will automatically:
+The skill will:
 1. Extract the file key from the URL
 2. Fetch design data via Figma MCP
 3. Analyze design tokens (colors, typography, spacing)

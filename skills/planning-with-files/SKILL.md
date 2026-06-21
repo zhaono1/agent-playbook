@@ -16,7 +16,7 @@ metadata:
 
 ## Description
 
-A Claude Code skill that transforms your workflow to use persistent markdown files for planning and progress tracking — the pattern that made Manus AI worth billions.
+A skill that transforms your workflow to use persistent markdown files for planning and progress tracking.
 
 ## The Problem
 

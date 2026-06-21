@@ -10,46 +10,39 @@ import sys
 from pathlib import Path
 
 
-def get_changed_files(base_branch: str = "main") -> list[str]:
-    """Get list of changed files."""
+def run_git(args: list[str], base_branch: str) -> str:
+    """Run a git command and fail with a useful error."""
     try:
         result = subprocess.run(
-            ["git", "diff", f"{base_branch}...HEAD", "--name-only"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return [f.strip() for f in result.stdout.strip().split('\n') if f.strip()]
-    except subprocess.CalledProcessError:
-        return []
-
-
-def get_commit_messages(base_branch: str = "main") -> list[str]:
-    """Get commit messages in the PR."""
-    try:
-        result = subprocess.run(
-            ["git", "log", f"{base_branch}...HEAD", "--oneline"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
-    except subprocess.CalledProcessError:
-        return []
-
-
-def get_diff(base_branch: str = "main") -> str:
-    """Get the full diff."""
-    try:
-        result = subprocess.run(
-            ["git", "diff", f"{base_branch}...HEAD"],
+            ["git", *args],
             capture_output=True,
             text=True,
             check=True
         )
         return result.stdout
-    except subprocess.CalledProcessError:
-        return ""
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        message = f"git {' '.join(args)} failed for base '{base_branch}'"
+        if detail:
+            message += f": {detail}"
+        raise RuntimeError(message) from exc
+
+
+def get_changed_files(base_branch: str = "main") -> list[str]:
+    """Get list of changed files."""
+    output = run_git(["diff", f"{base_branch}...HEAD", "--name-only"], base_branch)
+    return [f.strip() for f in output.strip().split('\n') if f.strip()]
+
+
+def get_commit_messages(base_branch: str = "main") -> list[str]:
+    """Get commit messages in the PR."""
+    output = run_git(["log", f"{base_branch}...HEAD", "--oneline"], base_branch)
+    return [line.strip() for line in output.strip().split('\n') if line.strip()]
+
+
+def get_diff(base_branch: str = "main") -> str:
+    """Get the full diff."""
+    return run_git(["diff", f"{base_branch}...HEAD"], base_branch)
 
 
 def categorize_file(filename: str) -> str:
@@ -178,14 +171,19 @@ def main():
     parser.add_argument("--output", "-o", help="Output file (default: stdout)")
     args = parser.parse_args()
 
-    checklist = generate_review_checklist(args.base)
+    try:
+        checklist = generate_review_checklist(args.base)
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
     if args.output:
         Path(args.output).write_text(checklist)
         print(f"Checklist written to {args.output}")
     else:
         print(checklist)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

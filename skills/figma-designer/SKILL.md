@@ -29,19 +29,14 @@ This skill analyzes Figma designs through the Figma MCP server and generates det
 
 ### Figma MCP Server
 
-Ensure the Figma MCP server is connected and accessible:
+Ensure the host exposes a Figma MCP server or plugin before using this skill.
+Tool names vary by host and plugin version, so inspect the available Figma tools
+in the current session instead of assuming fixed names. The required capability
+set is:
 
-```bash
-# Check if Figma MCP is available
-mcp-list
-```
-
-If not available, install from: https://github.com/modelcontextprotocol/servers
-
-Required Figma MCP tools:
-- `figma_get_file` - Get file metadata
-- `figma_get_nodes` - Get node details
-- `figma_get_components` - Get component information
+- Read file or page metadata
+- Read selected nodes or node details
+- Read component and style information when available
 
 ## When This Skill Activates
 
@@ -60,9 +55,9 @@ Input: Figma URL or File Key
   ↓
 Extract File Key from URL
   ↓
-Call figma_get_file to get metadata
+Call the available Figma metadata tool
   ↓
-Call figma_get_nodes to get design tree
+Call the available Figma node/detail tool
   ↓
 Parse frame, component, and text nodes
 ```

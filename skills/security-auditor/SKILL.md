@@ -235,7 +235,7 @@ grep -r "webhook.*url\|callback.*url" src/
 
 ### Configuration
 - [ ] Debug mode off
-- [ ) HTTPS enforced
+- [ ] HTTPS enforced
 - [ ] CORS configured correctly
 - [ ] Security headers set
 - [ ] Environment variables for secrets

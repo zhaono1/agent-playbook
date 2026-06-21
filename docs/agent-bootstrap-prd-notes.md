@@ -1,5 +1,8 @@
 # PRD Notes: Agent Playbook One-Click Setup and Skill Workflow Fixes
 
+> Historical research snapshot from the original bootstrap planning work. Do not
+> treat local-machine observations in this file as current repository state.
+
 ## Raw Requirements
 - User wants one-click usage for this project.
 - Skill storage locations differ between OpenAI Codex and Claude Code; need unified installation.
@@ -20,11 +23,11 @@
 ## Research Findings
 - Current docs recommend symlinking skills to `~/.claude/skills` or copying into `.claude/skills` (README).
 - Auto-trigger and workflow-orchestrator are documented but there is no runtime automation in this repo; `session-logger` is manual by default.
-- `self-improving-agent` requires hooks configured in `~/.claude/settings.json`; hook scripts currently only log to stderr.
+- `self-improving-agent` requires hooks configured in Claude Code settings; hook scripts should avoid logging raw tool payloads.
 - `skills/self-improving-agent/memory` only contains `semantic-patterns.json`; episodic/working memory directories are not present.
-- MCP server exists for skill discovery and requires `~/.claude/settings.json` configuration.
-- Local `~/.claude/settings.json` only sets env vars; no hooks are configured, so auto triggers cannot run.
-- Local `~/.claude/skills` uses symlinks to this repo for Claude Code, but there is no Codex installation path configured.
+- MCP server exists for skill discovery; current Claude Code MCP configuration should use `claude mcp add`, `.mcp.json`, or `~/.claude.json` depending on scope.
+- The local `~/.claude/settings.json` observation below was a dated machine snapshot and should be rechecked before use.
+- The local `~/.claude/skills` observation below was a dated machine snapshot and should be rechecked before use.
 - Claude Code hooks are configured in `~/.claude/settings.json`, `.claude/settings.json`, or `.claude/settings.local.json` (official hooks docs). SessionStart/SessionEnd hooks exist and include `transcript_path` in input, useful for session logging. (https://code.claude.com/docs/en/hooks)
 - Codex reads config from `~/.codex/config.toml` and shares config between CLI and IDE. (https://developers.openai.com/codex/config-basic)
 - Codex skill search paths include repo and user scopes: `$CWD/.codex/skills`, `$REPO_ROOT/.codex/skills`, and user `$CODEX_HOME/skills` (default `~/.codex/skills`). Codex supports symlinked skill folders. (https://developers.openai.com/codex/skills)

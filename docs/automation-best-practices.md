@@ -158,7 +158,9 @@ metadata:
       - notify: user
 ```
 
-`metadata.hooks` 是技能链路的单一来源。CLI、orchestrator、doctor 只能读取它，不应维护另一份硬编码 hook 映射。
+`metadata.hooks` 是技能链路意图的单一来源。CLI、orchestrator、doctor
+应优先读取它；如果当前实现仍有兼容性硬编码，必须把它标为迁移债务，
+并用验证覆盖避免与技能 frontmatter 漂移。
 
 ---
 
@@ -235,8 +237,8 @@ metadata:
 ## Workflow: PRD Creation
 
 When prd-planner completes:
-1. Automatically trigger self-improving-agent (background)
-2. Automatically trigger session-logger (auto)
+1. Record or run self-improving-agent as a background follow-up
+2. Record or run session-logger when the host supports it
 3. Ask user if they want to create PR
 ```
 
@@ -280,4 +282,3 @@ logging:
 - [Automate Your Development Workflow with Kiro's AI Agent Hooks](https://kiro.dev/blog/automate-your-development-workflow-with-agent-hooks/)
 - [LangChain Workflows and Agents](https://docs.langchain.com/oss/python/langgraph/workflows-agents)
 - [6 Agentic AI Patterns](https://genesishumanexperience.com/2025/07/13/%F0%9F%A7%A0-6-agentic-ai-patterns-from-zero-shot-to-multi-agent-orchestration/)
-- [Multi-Agent Patterns](https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/multi-agent-patterns/)

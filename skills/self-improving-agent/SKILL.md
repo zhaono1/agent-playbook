@@ -364,7 +364,9 @@ Treat `metadata.hooks` as the source of truth. Do not maintain a second hardcode
 
 ### Wiring Hooks in Claude Code Settings
 
-Add to Claude Code settings (`~/.claude/settings.json`):
+For Claude Code, install hooks through `agent-playbook init --hooks` when possible.
+If you need manual setup, add hook entries to Claude Code settings at the
+appropriate user or project scope.
 
 ```json
 {
@@ -439,12 +441,12 @@ See `references/appendix.md` for memory structure, workflow diagrams, metrics, f
 
 ## Quick Start
 
-After any skill completes, this agent automatically:
+After a high-signal skill workflow completes, this agent can:
 
 1. **Analyzes** what happened
 2. **Extracts** patterns and insights
 3. **Writes** memory and proposal artifacts
-4. **Promotes** validated improvements when approval or evidence is sufficient
+4. **Promotes** validated improvements only when approval or evidence is sufficient
 5. **Reports** summary to user
 
 ## References
@@ -454,6 +456,5 @@ After any skill completes, this agent automatically:
 - [Lifelong Learning of LLM based Agents](https://arxiv.org/html/2501.07278v1)
 - [Evo-Memory: DeepMind's Benchmark](https://shothota.medium.com/evo-memory-deepminds-new-benchmark)
 - [Let's Build a Self-Improving AI Agent](https://medium.com/@nomannayeem/lets-build-a-self-improving-ai-agent-that-learns-from-your-feedback-722d2ce9c2d9)
-- [OpenClaw self-improving-agent skill](https://github.com/openclaw/skills/tree/main/skills/pskoett/self-improving-agent)
 - [OpenCrabs local self-improving agent](https://github.com/adolfousier/opencrabs)
 - [ELL-StuLife experience-driven lifelong learning](https://github.com/ECNU-ICALK/ELL-StuLife)

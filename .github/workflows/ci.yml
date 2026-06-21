@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python3 -m pip install "git+https://github.com/agentskills/agentskills.git@main#subdirectory=skills-ref"
+      - run: python3 -m pip install "git+https://github.com/agentskills/agentskills.git@5d4c1fda3f786fff826c7f56b6cb3341e7f3a911#subdirectory=skills-ref"
       - run: |
           set -euo pipefail
           while IFS= read -r -d '' skill_md; do

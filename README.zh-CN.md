@@ -153,20 +153,20 @@ agent-playbook/
 
 ## 技能目录
 
-### 元技能（工作流与自动化）
+### 元技能（工作流与协调）
 
-| 技能 | 描述 | 自动触发 |
+| 技能 | 描述 | 后续动作 |
 |------|------|----------|
 | **[skill-router](./skills/skill-router/)** | 智能路由，将用户请求引导至最合适的技能 | 手动 |
-| **[create-pr](./skills/create-pr/)** | 创建 PR 并自动更新中英文文档 | 技能更新后 |
-| **[session-logger](./skills/session-logger/)** | 保存对话历史到会话日志文件 | 自动（任何技能完成后） |
-| **[auto-trigger](./skills/auto-trigger/)** | 定义技能之间的自动触发关系 | 仅配置 |
-| **[workflow-orchestrator](./skills/workflow-orchestrator/)** | 协调多技能工作流并触发后续操作 | 自动 |
-| **[self-improving-agent](./skills/self-improving-agent/)** | 通用自我进化系统，从所有技能经验中学习 | 后台 |
+| **[create-pr](./skills/create-pr/)** | 创建 PR 并检查中英文文档同步 | 提交时 |
+| **[session-logger](./skills/session-logger/)** | 保存对话历史到会话日志文件 | 由宿主 hook 支持 |
+| **[auto-trigger](./skills/auto-trigger/)** | 记录技能之间的后续动作 hook 元数据 | 仅配置 |
+| **[workflow-orchestrator](./skills/workflow-orchestrator/)** | 协调多技能工作流并记录受支持的后续动作 | 手动 / 由宿主 hook 支持 |
+| **[self-improving-agent](./skills/self-improving-agent/)** | 捕获学习产物并提出经过验证的改进 | 手动 / 后台后续动作 |
 
 ### 核心开发
 
-| 技能 | 描述 | 自动触发 |
+| 技能 | 描述 | 后续动作 |
 |------|------|----------|
 | **[commit-helper](./skills/commit-helper/)** | 遵循 Conventional Commits 规范的 Git 提交信息 | 手动 |
 | **[code-reviewer](./skills/code-reviewer/)** | 全面审查代码质量、安全性和最佳实践 | 手动 / 实现完成后 |
@@ -175,7 +175,7 @@ agent-playbook/
 
 ### 文档与测试
 
-| 技能 | 描述 | 自动触发 |
+| 技能 | 描述 | 后续动作 |
 |------|------|----------|
 | **[documentation-engineer](./skills/documentation-engineer/)** | 技术文档和 README 编写 | 手动 |
 | **[api-documenter](./skills/api-documenter/)** | OpenAPI/Swagger API 文档 | 手动 |
@@ -184,7 +184,7 @@ agent-playbook/
 
 ### 架构与运维
 
-| 技能 | 描述 | 自动触发 |
+| 技能 | 描述 | 后续动作 |
 |------|------|----------|
 | **[api-designer](./skills/api-designer/)** | REST 和 GraphQL API 架构设计 | 手动 |
 | **[security-auditor](./skills/security-auditor/)** | 覆盖 OWASP Top 10 的安全审计 | 手动 |
@@ -193,7 +193,7 @@ agent-playbook/
 
 ### 规划与架构
 
-| 技能 | 描述 | 自动触发 |
+| 技能 | 描述 | 后续动作 |
 |------|------|----------|
 | **[prd-planner](./skills/prd-planner/)** | 使用持久化文件规划创建 PRD | 手动（关键词："PRD"） |
 | **[prd-implementation-precheck](./skills/prd-implementation-precheck/)** | 实现 PRD 前进行预检查 | 手动 |
@@ -203,31 +203,33 @@ agent-playbook/
 
 ### 设计与创意
 
-| 技能 | 描述 | 自动触发 |
+| 技能 | 描述 | 后续动作 |
 |------|------|----------|
 | **[figma-designer](./skills/figma-designer/)** | 分析 Figma 设计并生成包含视觉规范的实现就绪 PRD | 手动（Figma 链接） |
 
-## 自动触发机制
+## Hook 后续动作机制
 
-技能完成时可以自动触发其他技能，形成工作流：
+技能可以在 `metadata.hooks` 中声明后续动作意图。宿主运行时或 agent
+可以基于这些元数据执行低风险动作、记录待处理后续动作，或在创建 PR
+这类外部动作前先询问用户。
 
 ```
 ┌──────────────┐
 │  prd-planner │ 完成
 └──────┬───────┘
        │
-       ├──→ self-improving-agent (后台) → 学习 PRD 模式
-       │         └──→ create-pr (询问) ──→ session-logger (自动)
+       ├──→ self-improving-agent (后台) → 写入学习提案
+       │         └──→ create-pr (询问) ──→ session-logger (如宿主支持)
        │
-       └──→ session-logger (自动)
+       └──→ session-logger (如宿主支持)
 ```
 
-### 自动触发模式
+### 后续动作模式
 
 | 模式 | 行为 |
 |------|------|
-| `auto` | 立即执行，阻塞直到完成 |
-| `background` | 后台运行，不等待结果 |
+| `auto` | 宿主可以执行或记录低风险后续动作 |
+| `background` | 宿主可以记录非阻塞分析或提案工作 |
 | `ask_first` | 执行前询问用户 |
 
 ## 使用方法
@@ -254,9 +256,9 @@ agent-playbook/
        ↓
 prd-planner 执行
        ↓
-阶段完成 → 自动触发：
-       ├──→ self-improving-agent (后台) - 提取模式
-       └──→ session-logger (自动) - 保存会话
+阶段完成 → 后续动作：
+       ├──→ self-improving-agent (后台) - 写入提案
+       └──→ session-logger (如宿主支持) - 保存会话
        ↓
 用户："实现这个 PRD"
        ↓
@@ -282,11 +284,11 @@ code-reviewer → self-improving-agent → create-pr
 **[docs/complete-workflow-example.md](./docs/complete-workflow-example.md)** - 从输入或设计参考到最终交付的端到端示例：
 
 1. **Input** → 上传图片或描述需求
-2. **PRD** → `prd-planner` 创建 PRD，并可触发 `self-improving-agent`
+2. **PRD** → `prd-planner` 创建 PRD，并可记录 `self-improving-agent` 后续动作
 3. **Review** → 评审并打磨方案
 4. **Implement** → 按照 PRD 实现
 5. **Review** → `code-reviewer` 检查质量
-6. **Feedback** → `self-improving-agent` 从结果中学习
+6. **Feedback** → `self-improving-agent` 捕获学习产物并提出更新
 7. **Submit** → `create-pr` 创建 PR，并保持中英文文档同步
 
 ## 更新技能
@@ -298,10 +300,10 @@ cd /path/to/agent-playbook
 git pull origin main
 ```
 
-如果使用复制的技能，重新复制更新的文件：
+如果使用复制的技能，通过 CLI 刷新，保持所有目标一致：
 
 ```bash
-cp -r /path/to/agent-playbook/skills/* ~/.claude/skills/
+apb skills upgrade --scope both --target all
 ```
 
 ## 贡献
@@ -321,7 +323,7 @@ cp -r /path/to/agent-playbook/skills/* ~/.claude/skills/
 9. 新增 skill 基础设施前，先查看 [Skill 生态参考](./docs/skill-ecosystem-references.md)
 10. 在需要中英文同步时，同时更新 README.md 和 README.zh-CN.md
 11. 验证技能结构：`python3 scripts/validate_skills.py`
-12. 可选：运行 skills-ref 校验：`python3 -m pip install "git+https://github.com/agentskills/agentskills.git@main#subdirectory=skills-ref" && skills-ref validate skills/<name>`
+12. 可选：运行 skills-ref 校验：`python3 -m pip install "git+https://github.com/agentskills/agentskills.git@5d4c1fda3f786fff826c7f56b6cb3341e7f3a911#subdirectory=skills-ref" && skills-ref validate skills/<name>`
 
 ## 许可证
 

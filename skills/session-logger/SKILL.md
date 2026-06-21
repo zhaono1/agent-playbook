@@ -136,7 +136,7 @@ sessions/
 Session logs are stored in `sessions/` which is in `.gitignore`.
 - Logs are NOT committed to git
 - Logs contain your actual conversation
-- Safe to include sensitive information
+- Do not include secrets, credentials, tokens, or private user data unless they are explicitly required and redacted
 
 ## Quick Reference
 

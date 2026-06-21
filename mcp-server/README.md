@@ -20,15 +20,23 @@ npm install
 
 ### Step 2: Configure Claude Code
 
-Add to `~/.claude/settings.json`:
+Register the server with Claude Code:
+
+```bash
+claude mcp add agent-playbook -- \
+  node /path/to/agent-playbook/mcp-server/index.js
+```
+
+For checked-in project configuration, place the server in `.mcp.json`. User and
+local-scope MCP server entries are stored by Claude Code in `~/.claude.json`.
+The server object is:
 
 ```json
 {
   "mcpServers": {
     "agent-playbook": {
       "command": "node",
-      "args": ["/path/to/agent-playbook/mcp-server/index.js"],
-      "cwd": "/path/to/agent-playbook/mcp-server"
+      "args": ["/path/to/agent-playbook/mcp-server/index.js"]
     }
   }
 }
