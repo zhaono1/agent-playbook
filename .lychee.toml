@@ -1,5 +1,6 @@
 exclude = [
   "^mailto:",
+  "^https://github\\.com/agentskills/agentskills\\.git@.*#subdirectory=skills-ref.*",
   "^https?://(?!([a-z0-9-]+\\.)*(acm\\.org|amazon\\.com|anthropic\\.com|atlassian\\.com|bigmodel\\.cn|chrome\\.com|claude\\.com|conventionalcommits\\.org|diataxis\\.fr|example\\.com|figma\\.com|generect\\.com|genesishumanexperience\\.com|github\\.com|github\\.io|githubusercontent\\.com|google\\.com|graphql\\.org|kiro\\.dev|langchain\\.com|manus\\.im|medium\\.com|ministryoftesting\\.com|mitre\\.org|modelcontextprotocol\\.io|openai\\.com|owasp\\.org|patronus\\.ai|refactoring\\.com|restfulapi\\.net|strandsagents\\.com|swagger\\.io|uipath\\.com|web\\.dev|arxiv\\.org)(/|$)).*"
 ]
 exclude_path = ["mcp-server/node_modules", "sessions"]

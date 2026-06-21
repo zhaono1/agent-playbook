@@ -1,6 +1,6 @@
 # Create PR
 
-A Claude Code skill for creating pull requests with automatic bilingual documentation updates.
+A skill for creating pull requests with bilingual documentation checks.
 
 ## Overview
 
@@ -8,8 +8,8 @@ This skill streamlines the PR creation process for the agent-playbook repository
 
 ## Features
 
-- **Automatic Change Analysis**: Examines git diff to understand what changed
-- **Documentation Sync**: Updates both README.md and README.zh-CN.md
+- **Change Analysis**: Examines git diff to understand what changed
+- **Documentation Sync**: Updates both README.md and README.zh-CN.md when user-facing docs are affected
 - **Bilingual Support**: Maintains parity between English and Chinese docs
 - **PR Template**: Provides consistent PR description format
 - **Verification Checklist**: Ensures nothing is missed before submission
@@ -17,8 +17,7 @@ This skill streamlines the PR creation process for the agent-playbook repository
 ## Installation
 
 ```bash
-mkdir -p ~/.claude/skills
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/create-pr ~/.claude/skills/create-pr
+apb skills add ./skills/create-pr --scope global --target all --link
 ```
 
 ## Workflow
@@ -87,8 +86,6 @@ The skill will focus on the skill-router changes and update documentation accord
 
 - [x] README.md updated
 - [x] README.zh-CN.md updated
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
 ## Bilingual Documentation
@@ -132,7 +129,7 @@ English | [简体中文](./README.zh-CN.md)
 1. Analyzes the skill-router directory
 2. Adds skill-router to Meta Skills table in README.md
 3. Adds skill-router to 元技能 table in README.zh-CN.md
-4. Commits all changes
+4. Commits intended changes
 5. Pushes to remote branch
 6. Creates PR with description
 

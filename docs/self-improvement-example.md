@@ -29,14 +29,14 @@ Claude 使用 debugger skill 进行调试
 
 ---
 
-## Step 2: 自动触发 Self-Improving-Agent
+## Step 2: 记录 Self-Improving-Agent 后续动作
 
 ```
 Debugger Complete
         ↓
 workflow-orchestrator 检测到完成
         ↓
-self-improving-agent (后台运行)
+self-improving-agent (后台提案，宿主支持时运行)
 ```
 
 ---
@@ -89,14 +89,14 @@ self-improving-agent (后台运行)
 
 ---
 
-## Step 5: 更新相关技能
+## Step 5: 生成相关技能改进提案
 
 ### 更新 debugger/SKILL.md
 
 ```markdown
 ---
 
-## Auto-Update (from self-improving-agent)
+## Proposed Update (from self-improving-agent)
 
 ### Pattern Added (2025-01-11)
 
@@ -128,7 +128,7 @@ When debugging UI refresh issues:
 ```markdown
 ---
 
-## Auto-Update (from self-improving-agent)
+## Proposed Update (from self-improving-agent)
 
 ### Pattern Added (2025-01-11)
 
@@ -148,7 +148,7 @@ When reviewing PRDs that specify callback props:
 ```markdown
 ---
 
-## Auto-Update (from self-improving-agent)
+## Proposed Update (from self-improving-agent)
 
 ### Pattern Added (2025-01-11)
 
@@ -179,16 +179,16 @@ onRefresh={() => { fetchReserves(); }}
 ```markdown
 ## 🧠 Self-Improvement Summary
 
-I've learned from this debugging session and made the following updates:
+I've learned from this debugging session and created the following proposals:
 
 ### Pattern Extracted
 **Callback Verification**: Always verify callback functions contain actual logic,
 not empty implementations.
 
-### Skills Updated
-- ✅ `debugger` - Added callback verification to checklist
-- ✅ `prd-implementation-precheck` - Added callback requirement check
-- ✅ `code-reviewer` - Added empty callback detection
+### Proposed Skill Updates
+- `debugger` - Add callback verification to checklist
+- `prd-implementation-precheck` - Add callback requirement check
+- `code-reviewer` - Add empty callback detection
 
 ### Confidence Level
 ⭐⭐☆☆☆ (0.5) - First occurrence, needs validation
@@ -251,7 +251,7 @@ Claude (已学习):
 │  用户问题 → Debugger 解决 → 提取经验 → 抽象模式                  │
 │     │           │              │            │                   │
 │     │           │              │            ↓                   │
-│     │           │              │    更新 3 个技能                │
+│     │           │              │    提出 3 个技能改进            │
 │     │           │              │            │                   │
 │     │           │              │            ↓                   │
 │     │           │              │    保存到记忆                   │
@@ -261,7 +261,7 @@ Claude (已学习):
 │     │           └────────────────→ 下次更快解决                 │
 │     │                                               │           │
 │     └───────────────────────────────────────────┘           │
-│                  每次使用都比上次更智能                          │
+│                  每次验证后沉淀更可靠的方法                      │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -270,8 +270,8 @@ Claude (已学习):
 
 ## 关键要点
 
-1. **自动触发** - 技能完成后自动学习，无需手动调用
-2. **多技能更新** - 一个经验可以更新多个相关技能
+1. **后续动作** - 技能完成后可记录学习提案，是否运行取决于宿主支持
+2. **多技能提案** - 一个经验可以提出多个相关技能的改进
 3. **置信度追踪** - 随着验证次数增加，模式更可靠
 4. **人类反馈** - 用户反馈帮助校准学习方向
-5. **持续改进** - 每次使用都变得更聪明
+5. **持续改进** - 经过验证的模式再推广到 durable guidance

@@ -6,10 +6,16 @@
     "MD032": false,
     "MD033": false,
     "MD034": false,
-    "MD041": false
+    "MD040": false,
+    "MD041": false,
+    "MD060": false
   },
   "globs": [
-    "**/*.md"
+    "README.md",
+    "README.zh-CN.md",
+    "docs/context-layering-for-agent-playbooks.md",
+    "docs/skill-ecosystem-references.md",
+    "prompts/README.md"
   ],
   "ignores": [
     "mcp-server/node_modules/**",

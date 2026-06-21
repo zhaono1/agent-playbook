@@ -1,6 +1,6 @@
 # Auto-Trigger
 
-> Configuration skill that defines automatic trigger relationships between skills.
+> Configuration skill that documents follow-up hook metadata between skills.
 
 ## Installation
 
@@ -10,7 +10,7 @@ This skill is part of the [agent-playbook](../../README.md) collection.
 
 This is a configuration skill and is **not** intended for direct invocation.
 
-Typical usage is through `workflow-orchestrator`, which reads the hook definitions from this skill and executes follow-up actions.
+Typical usage is through `workflow-orchestrator`, which reads the hook definitions from this skill and records or runs supported follow-up actions.
 
 ## Example
 

@@ -1,6 +1,6 @@
 # PRD: Comprehensive Local Skill Manager (apb)
 
-> Status: DRAFT  
+> Status: Historical plan / partially implemented
 > Last updated: 2026-01-21
 
 ## Table of Contents

@@ -1,6 +1,6 @@
 ---
 name: create-pr
-description: Creates pull requests with bilingual documentation updates. Use when user asks to create PR, make a pull request, or submit changes for review. Automatically updates both English and Chinese README files.
+description: Creates pull requests with bilingual documentation checks. Use when user asks to create PR, make a pull request, or submit changes for review. Ensures English and Chinese README files stay in sync when user-facing skill catalog changes require it.
 allowed-tools: Read, Write, Edit, Bash, Grep, AskUserQuestion
 metadata:
   hooks:
@@ -12,7 +12,7 @@ metadata:
 
 # Create PR
 
-A skill for creating pull requests with automatic bilingual documentation updates. This skill ensures that both English and Chinese documentation stay in sync when code changes are submitted.
+A skill for creating pull requests with bilingual documentation checks. This skill ensures that English and Chinese documentation stay in sync before code changes are submitted.
 
 ## When This Skill Activates
 
@@ -97,8 +97,8 @@ Types:
 Run the following sequence:
 
 ```bash
-# 1. Stage and commit changes
-git add .
+# 1. Stage only the intended files
+git add <changed-files>
 git commit -m "commit message"
 
 # 2. Push to remote
@@ -112,7 +112,8 @@ gh pr create \
 
 ### Step 5: Update Documentation (If Required)
 
-After creating the PR, update both README files:
+Before committing or creating the PR, update both README files when the change
+affects user-facing skill catalog, installation, or workflow behavior:
 
 **README.md** (English):
 - Add new skills to appropriate category table
@@ -151,7 +152,7 @@ When adding or modifying skills, use this format for the Skills Catalog:
 ```markdown
 ### Category Name
 
-| Skill | Description | Auto-Trigger |
+| Skill | Description | Follow-up |
 |-------|-------------|--------------|
 | **[skill-name](./skills/skill-name/)** | Brief description | Manual / Auto / Background / (keyword: "...") |
 ```
@@ -160,7 +161,7 @@ When adding or modifying skills, use this format for the Skills Catalog:
 ```markdown
 ### 类别名称
 
-| 技能 | 描述 | 自动触发 |
+| 技能 | 描述 | 后续动作 |
 |------|------|----------|
 | **[skill-name](./skills/skill-name/)** | 简短描述 | 手动 / 自动 / 后台 / (关键词："...") |
 ```
@@ -253,9 +254,6 @@ When creating a PR, use this template:
 - [ ] Documentation links verified
 - [ ] Bilingual translations checked
 
----
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
 ## Common Scenarios
@@ -268,8 +266,8 @@ mkdir -p skills/new-skill
 touch skills/new-skill/SKILL.md
 touch skills/new-skill/README.md
 
-# 2. Create symlink
-ln -s ~/path/to/agent-playbook/skills/new-skill ~/.claude/skills/new-skill
+# 2. Install or link through the package CLI when possible
+apb skills add ./skills/new-skill --scope project --target all --link
 
 # 3. Update README.md (add to skills table)
 # 4. Update README.zh-CN.md (add to skills table with translation)
@@ -332,7 +330,7 @@ Before creating the PR, verify:
 | `git status` | Check current state |
 | `git diff` | See unstaged changes |
 | `git log main..HEAD` | See branch commits |
-| `git add .` | Stage all changes |
+| `git add <changed-files>` | Stage only intended files |
 | `git commit -m "msg"` | Commit with message |
 | `git push -u origin branch` | Push to remote |
 | `gh pr create` | Create pull request |

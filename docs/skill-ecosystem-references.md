@@ -15,7 +15,6 @@ Use this page as a short map of external skill systems worth tracking. These are
 | Source | What to Borrow | Repository |
 |--------|----------------|------------|
 | Superpowers bootstrap discussion | Make bootstrap visible, include the available skill list, and avoid silent hidden behavior | [obra/superpowers issue 223](https://github.com/obra/superpowers/issues/223) |
-| OpenClaw self-improvement skill | Log learnings, errors, feature requests, and promote broadly useful knowledge into repo instructions | [openclaw/skills self-improving-agent](https://github.com/openclaw/skills/tree/main/skills/pskoett/self-improving-agent) |
 | OpenCrabs | Local-first memory, procedural command capture, cross-session recall, and user-owned improvement data | [adolfousier/opencrabs](https://github.com/adolfousier/opencrabs) |
 | ELL-StuLife | Experience-driven loop: exploration, long-term memory, skill learning, and knowledge internalization | [ECNU-ICALK/ELL-StuLife](https://github.com/ECNU-ICALK/ELL-StuLife) |
 

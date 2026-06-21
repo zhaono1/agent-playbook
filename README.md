@@ -151,20 +151,20 @@ agent-playbook/
 
 ## Skills Catalog
 
-### Meta Skills (Workflow & Automation)
+### Meta Skills (Workflow & Coordination)
 
-| Skill | Description | Auto-Trigger |
+| Skill | Description | Follow-up |
 |-------|-------------|--------------|
 | **[skill-router](./skills/skill-router/)** | Intelligently routes user requests to the most appropriate skill | Manual |
-| **[create-pr](./skills/create-pr/)** | Creates PRs with automatic bilingual documentation updates | After skill updates |
-| **[session-logger](./skills/session-logger/)** | Saves conversation history to session log files | Auto (after any skill) |
-| **[auto-trigger](./skills/auto-trigger/)** | Defines automatic trigger relationships between skills | Config only |
-| **[workflow-orchestrator](./skills/workflow-orchestrator/)** | Coordinates multi-skill workflows and triggers follow-up actions | Auto |
-| **[self-improving-agent](./skills/self-improving-agent/)** | Universal self-improvement that learns from ALL skill experiences | Background |
+| **[create-pr](./skills/create-pr/)** | Creates PRs with bilingual documentation checks | On submission |
+| **[session-logger](./skills/session-logger/)** | Saves conversation history to session log files | Host-supported hook |
+| **[auto-trigger](./skills/auto-trigger/)** | Documents follow-up hook metadata between skills | Config only |
+| **[workflow-orchestrator](./skills/workflow-orchestrator/)** | Coordinates multi-skill workflows and records supported follow-ups | Manual / host-supported hook |
+| **[self-improving-agent](./skills/self-improving-agent/)** | Captures learning artifacts and proposes validated improvements | Manual / background follow-up |
 
 ### Core Development
 
-| Skill | Description | Auto-Trigger |
+| Skill | Description | Follow-up |
 |-------|-------------|--------------|
 | **[commit-helper](./skills/commit-helper/)** | Git commit messages following Conventional Commits specification | Manual |
 | **[code-reviewer](./skills/code-reviewer/)** | Comprehensive code review for quality, security, and best practices | Manual / After implementation |
@@ -173,7 +173,7 @@ agent-playbook/
 
 ### Documentation & Testing
 
-| Skill | Description | Auto-Trigger |
+| Skill | Description | Follow-up |
 |-------|-------------|--------------|
 | **[documentation-engineer](./skills/documentation-engineer/)** | Technical documentation and README creation | Manual |
 | **[api-documenter](./skills/api-documenter/)** | OpenAPI/Swagger API documentation | Manual |
@@ -182,7 +182,7 @@ agent-playbook/
 
 ### Architecture & DevOps
 
-| Skill | Description | Auto-Trigger |
+| Skill | Description | Follow-up |
 |-------|-------------|--------------|
 | **[api-designer](./skills/api-designer/)** | REST and GraphQL API architecture design | Manual |
 | **[security-auditor](./skills/security-auditor/)** | Security audit covering OWASP Top 10 | Manual |
@@ -191,7 +191,7 @@ agent-playbook/
 
 ### Planning & Architecture
 
-| Skill | Description | Auto-Trigger |
+| Skill | Description | Follow-up |
 |-------|-------------|--------------|
 | **[prd-planner](./skills/prd-planner/)** | Creates PRDs using persistent file-based planning | Manual (keyword: "PRD") |
 | **[prd-implementation-precheck](./skills/prd-implementation-precheck/)** | Performs preflight review before implementing PRDs | Manual |
@@ -201,31 +201,33 @@ agent-playbook/
 
 ### Design & Creative
 
-| Skill | Description | Auto-Trigger |
+| Skill | Description | Follow-up |
 |-------|-------------|--------------|
 | **[figma-designer](./skills/figma-designer/)** | Analyzes Figma designs and generates implementation-ready PRDs with visual specifications | Manual (Figma URL) |
 
-## How Auto-Triggers Work
+## How Hook Follow-ups Work
 
-Skills can automatically trigger other skills when they complete. This creates workflows:
+Skills can declare follow-up intent in `metadata.hooks`. A host runtime or agent
+may use that metadata to run low-risk actions, record pending follow-ups, or ask
+before taking external actions such as PR creation.
 
 ```
 ┌──────────────┐
 │  prd-planner │ completes
 └──────┬───────┘
        │
-       ├──→ self-improving-agent (background) → learns from PRD patterns
-       │         └──→ create-pr (ask first) ──→ session-logger (auto)
+       ├──→ self-improving-agent (background) → writes learning proposal
+       │         └──→ create-pr (ask first) ──→ session-logger (if supported)
        │
-       └──→ session-logger (auto)
+       └──→ session-logger (if supported)
 ```
 
-### Auto-Trigger Modes
+### Follow-up Modes
 
 | Mode | Behavior |
 |------|----------|
-| `auto` | Executes immediately, blocks until complete |
-| `background` | Runs without blocking, no wait for result |
+| `auto` | Host may run or record a low-risk follow-up |
+| `background` | Host may record non-blocking analysis or proposal work |
 | `ask_first` | Asks user before executing |
 
 ## Usage
@@ -252,9 +254,9 @@ User: "Create a PRD for user authentication"
        ↓
 prd-planner executes
        ↓
-Phase complete → Auto-triggers:
-       ├──→ self-improving-agent (background) - extracts patterns
-       └──→ session-logger (auto) - saves session
+Phase complete → follow-ups:
+       ├──→ self-improving-agent (background) - writes proposal
+       └──→ session-logger (if supported) - saves session
        ↓
 User: "Implement this PRD"
        ↓
@@ -280,11 +282,11 @@ code-reviewer → self-improving-agent → create-pr
 **[docs/complete-workflow-example.md](./docs/complete-workflow-example.md)** - An end-to-end example from input or design reference to final delivery:
 
 1. **Input** → Upload an image or describe the request
-2. **PRD** → `prd-planner` creates the PRD and can trigger `self-improving-agent`
+2. **PRD** → `prd-planner` creates the PRD and can record a `self-improving-agent` follow-up
 3. **Review** → Review and refine the plan
 4. **Implement** → Build against the PRD
 5. **Review** → `code-reviewer` checks quality
-6. **Feedback** → `self-improving-agent` learns from the result
+6. **Feedback** → `self-improving-agent` captures learning artifacts and proposes updates
 7. **Submit** → `create-pr` opens a PR and keeps bilingual docs aligned
 
 ## Updating Skills
@@ -296,10 +298,10 @@ cd /path/to/agent-playbook
 git pull origin main
 ```
 
-If using copied skills, re-copy the updated files:
+If using copied skills, refresh through the CLI so all selected targets stay aligned:
 
 ```bash
-cp -r /path/to/agent-playbook/skills/* ~/.claude/skills/
+apb skills upgrade --scope both --target all
 ```
 
 ## Contributing
@@ -319,7 +321,7 @@ When contributing skills:
 9. Check [Skill Ecosystem References](./docs/skill-ecosystem-references.md) before adding new skill infrastructure
 10. Update both README.md and README.zh-CN.md when bilingual parity is part of the change
 11. Validate skill structure: `python3 scripts/validate_skills.py`
-12. Optional: run skills-ref validation: `python3 -m pip install "git+https://github.com/agentskills/agentskills.git@main#subdirectory=skills-ref" && skills-ref validate skills/<name>`
+12. Optional: run skills-ref validation: `python3 -m pip install "git+https://github.com/agentskills/agentskills.git@5d4c1fda3f786fff826c7f56b6cb3341e7f3a911#subdirectory=skills-ref" && skills-ref validate skills/<name>`
 
 ## License
 

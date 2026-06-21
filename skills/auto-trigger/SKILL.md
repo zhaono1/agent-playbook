@@ -1,12 +1,15 @@
 ---
 name: auto-trigger
-description: Workflow automation hooks for agent-playbook skills. This skill defines automatic triggers between skills - DO NOT use directly, it's a configuration skill that other skills reference.
+description: Workflow hook metadata for agent-playbook skills. This skill documents trigger intent between skills - DO NOT use directly, and do not assume hooks execute unless the host runtime explicitly supports them.
 allowed-tools: Read, Write, Edit
 ---
 
 # Auto-Trigger Hooks
 
-This skill defines automatic trigger relationships between skills. When a skill completes its workflow, it should automatically trigger the next skill in the chain.
+This skill defines trigger intent between skills. When a skill completes its
+workflow, a host runtime or agent may read this metadata, record a pending
+follow-up, and execute the next skill only when that action is supported and
+safe for the current session.
 
 ## Hook Definitions
 
@@ -38,8 +41,8 @@ implementation_complete:
       mode: ask_first
       message: "Implementation complete. Run code review?"
     - skill: create-pr
-      mode: auto
-      condition: changes_staged
+      mode: ask_first
+      condition: user_requested_submission
 ```
 
 ### Session Management
@@ -87,8 +90,8 @@ When a skill completes its workflow:
 
 1. **Check `hooks`** in its own front matter (`before_start`, `after_complete`, `on_error`, `on_progress`)
 2. **For each hook:**
-   - If `mode: auto`, trigger immediately
-   - If `mode: background`, trigger without waiting
+   - If `mode: auto`, record or run a low-risk follow-up only when the host runtime supports it
+   - If `mode: background`, record a non-blocking follow-up; do not mutate durable files silently
    - If `mode: ask_first`, ask user before triggering
    - If `condition:` exists, check it first
 3. **Pass context** to the triggered skill
@@ -178,6 +181,6 @@ on_error:
 ## Important Rules
 
 1. **Don't create infinite loops** - Ensure chains terminate
-2. **Ask before major actions** - Use `mode: ask_first` for PRs, deployments
-3. **Background tasks** - Use `mode: background` for non-blocking tasks
+2. **Ask before major actions** - Use `mode: ask_first` for PRs, deployments, and durable file changes
+3. **Background tasks** - Use `mode: background` for non-blocking analysis or proposal artifacts
 4. **Pass context** - Always include relevant context to triggered skills

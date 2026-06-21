@@ -3,7 +3,35 @@
 
 from pathlib import Path
 import argparse
+import re
 import textwrap
+from urllib.parse import urlparse
+
+
+RESOURCE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+VERSION_RE = re.compile(r"^\d+\.\d+\.\d+([+-][0-9A-Za-z.-]+)?$")
+
+
+def validate_resource_name(name: str) -> str:
+    value = name.strip().lower()
+    if not RESOURCE_RE.fullmatch(value):
+        raise argparse.ArgumentTypeError(
+            "--name must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens"
+        )
+    return value
+
+
+def validate_version(version: str) -> str:
+    if not VERSION_RE.fullmatch(version):
+        raise argparse.ArgumentTypeError("--version must be a semantic version such as 1.0.0")
+    return version
+
+
+def validate_base_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise argparse.ArgumentTypeError("--base-url must be an absolute http(s) URL")
+    return url.rstrip("/")
 
 
 def write_output(path: Path, content: str, force: bool) -> bool:
@@ -18,17 +46,15 @@ def write_output(path: Path, content: str, force: bool) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate a starter OpenAPI schema.")
     parser.add_argument("--output", default="openapi.yaml", help="Output file path")
-    parser.add_argument("--name", default="example", help="Resource name")
-    parser.add_argument("--version", default="1.0.0", help="API version")
+    parser.add_argument("--name", default="example", type=validate_resource_name, help="Resource name")
+    parser.add_argument("--version", default="1.0.0", type=validate_version, help="API version")
     parser.add_argument(
-        "--base-url", default="https://example.com", help="Server base URL"
+        "--base-url", default="https://example.com", type=validate_base_url, help="Server base URL"
     )
     parser.add_argument("--force", action="store_true", help="Overwrite existing file")
     args = parser.parse_args()
 
     schema_name = "".join(part.capitalize() for part in args.name.split("-"))
-    if not schema_name:
-        schema_name = "Example"
 
     content = textwrap.dedent(
         f"""\

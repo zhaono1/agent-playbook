@@ -1,6 +1,6 @@
 # PRD: Agent Playbook One-Click Setup and Skill Workflow Fixes
 
-> Status: DRAFT
+> Status: Historical plan / partially implemented
 > Last updated: 2026-01-20 16:39
 
 ## Table of Contents
@@ -65,7 +65,7 @@ Agent-playbook requires manual, inconsistent setup across Claude Code and Codex.
    - Global (default) and project-level (`--project` flag).
    - Symlink by default; fallback to copy when symlink fails.
 4. Claude Code integration:
-   - Add hooks in `settings.json` for SessionStart/SessionEnd and PostToolUse (minimal MVP for logging).
+   - Add hooks in `settings.json` for SessionEnd and PostToolUse (minimal MVP for logging).
    - Support opt-in `--hooks` or `--no-hooks` flags.
 5. Codex integration:
    - Detect `~/.codex/config.toml` and `~/.codex/skills`.

@@ -16,17 +16,17 @@
 │  └─────────┘       └─────────┘      └─────────┘     └─────────┘        │
 │       │                  │                  │                │           │
 │       ▼                  ▼                  ▼                ▼           │
-│  User provides     Creates PRD      Extracts       Write code       │
+│  User provides     Creates PRD      Records        Write code       │
 │  requirement       with 4-file     patterns        & tests          │
-│                    pattern          & updates       │                │
+│                    pattern          as proposals    │                │
 │                                         │           │                │
 │                                         ▼           ▼                │
 │  5. FEEDBACK LOOP          6. DELIVER                           │
 │  ┌─────────────────────────────────────────────────┐                │
 │  │  code-reviewer → self-imp-agent → create-pr    │                │
 │  │       ↓                  ↓              ↓       │                │
-│  │  Review quality    Learn from     Submit PR    │                │
-│  │  & patterns        experience    with README   │                │
+│  │  Review quality    Capture       Submit PR     │                │
+│  │  & patterns        proposals     with docs     │                │
 │  └─────────────────────────────────────────────────┘                │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -44,7 +44,7 @@
 帮我分析这个图片，创建一个 PRD，然后实现它
 ```
 
-**Claude 自动执行：**
+**Claude 根据上下文执行：**
 
 1. **分析图片**（使用视觉能力）
    - 识别 UI 组件、布局、交互
@@ -56,10 +56,10 @@
 
 ### 步骤 2: 创建 PRD
 
-**Claude 自动调用 `prd-planner` 技能：**
+**Claude 调用 `prd-planner` 技能：**
 
 ```bash
-# prd-planner 自动执行
+# prd-planner 执行
 Creating PRD using 4-file pattern...
 
 ✓ docs/data-refresh-prd-notes.md      # 思考过程
@@ -68,10 +68,10 @@ Creating PRD using 4-file pattern...
 ✓ docs/data-refresh-tech.md           # 技术设计
 ```
 
-**prd-planner 完成后自动触发：**
+**prd-planner 完成后可记录后续动作：**
 ```
-→ self-improving-agent (background) - 学习 PRD 模式
-→ session-logger (auto) - 保存会话
+→ self-improving-agent (background) - 记录学习提案
+→ session-logger (auto) - 宿主支持时保存会话
 ```
 
 ---
@@ -97,9 +97,9 @@ Creating PRD using 4-file pattern...
 - ui_ux_specification_granularity: UI PRDs 需要明确的视觉规范
 - measurable_success_criteria: 成功标准必须包含具体数字
 
-### 自动更新的技能
-- prd-planner: 添加 UI 规范检查项
-- architecting-solutions: 添加视觉规范模板
+### 生成的改进提案
+- prd-planner: 建议添加 UI 规范检查项
+- architecting-solutions: 建议添加视觉规范模板
 ```
 
 ---
@@ -145,7 +145,7 @@ export const RefreshActionButton = () => {
 review 一下代码
 ```
 
-**Clade 调用 `code-reviewer`：**
+**Claude 调用 `code-reviewer`：**
 
 ```markdown
 ## Code Review 结果
@@ -159,10 +159,10 @@ review 一下代码
 - 添加错误处理
 ```
 
-**审核完成后自动触发：**
+**审核完成后可记录后续动作：**
 ```
-→ self-improving-agent (background) - 学习审核模式
-→ session-logger (auto) - 保存审核记录
+→ self-improving-agent (background) - 记录审核模式提案
+→ session-logger (auto) - 宿主支持时保存审核记录
 ```
 
 ---
@@ -189,8 +189,8 @@ review 一下代码
   "pattern_extracted": "ui_ux_specification_granularity",
   "confidence": 0.90,
   "actions_taken": [
-    "更新 prd-planner 检查清单",
-    "添加 UI 规范模板到 architecting-solutions"
+    "提出 prd-planner 检查清单更新",
+    "提出 architecting-solutions UI 规范模板更新"
   ]
 }
 ```
@@ -208,19 +208,19 @@ review 一下代码
 
 ```bash
 # 1. 提交代码
-git add .
+git add RefreshActionButton.tsx RefreshActionButton.test.tsx
 git commit -m "feat: add data refresh button with loading state"
 
 # 2. 推送
 git push -u origin feat/data-refresh
 
-# 3. 创建 PR（自动更新中英文 README）
+# 3. 创建 PR（检查中英文 README 是否需要同步）
 ✓ PR #15 created
 ```
 
-**create-pr 自动触发：**
+**create-pr 完成后可记录后续动作：**
 ```
-→ session-logger (auto) - 记录 PR 创建
+→ session-logger (auto) - 宿主支持时记录 PR 创建
 ```
 
 ---
@@ -236,7 +236,7 @@ git push -u origin feat/data-refresh
 ```
 修改代码 → code-reviewer → self-improving-agent → 提交
             ↓                                          ↓
-      提取新的模式                                更新技能文件
+      提取新的模式                                生成改进提案
 ```
 
 ---
@@ -258,7 +258,7 @@ Claude: 我看到了这个 UI 设计图。让我使用 prd-planner 创建 PRD...
   - docs/data-refresh-prd.md
   - docs/data-refresh-tech.md
 
-[后台自动触发 self-improving-agent，提取 PRD 模式]
+[记录 self-improving-agent 后续动作，提取 PRD 模式提案]
 
 ═══════════════════════════════════════════════════════════════
 你: 审核一下这个 PRD
@@ -270,7 +270,7 @@ Claude: [自我审核]
 1. UI 规范可以更详细（按钮大小、间距）
 2. 成功标准需要具体时间限制
 
-已在 prd-planner 中添加这些检查项...
+已生成 prd-planner 检查项改进提案...
 
 ═══════════════════════════════════════════════════════════════
 你: 开始实现
@@ -296,7 +296,7 @@ Claude: [调用 code-reviewer]
 ✅ 测试覆盖完整
 ⚠️  建议添加错误边界
 
-[后台自动触发 self-improving-agent，提取审核模式]
+[记录 self-improving-agent 后续动作，提取审核模式提案]
 
 ═══════════════════════════════════════════════════════════════
 你: 提交代码
@@ -305,20 +305,20 @@ Claude: [调用 code-reviewer]
 Claude: [调用 create-pr]
 
 ✓ PR 已创建: https://github.com/.../pull/15
-✓ README.md 和 README.zh-CN.md 已同步更新
+✓ README.md 和 README.zh-CN.md 已检查；需要时已同步更新
 ```
 
 ---
 
-## 技能自动触发关系
+## 技能 Hook 后续动作关系
 
-| 触发时机 | 自动触发的技能 | 目的 |
+| 触发时机 | 后续动作 | 目的 |
 |---------|---------------|------|
-| prd-planner 完成 | self-improving-agent | 学习 PRD 模式 |
-| prd-planner 完成 | session-logger | 保存会话 |
-| code-reviewer 完成 | self-improving-agent | 提取代码质量模式 |
-| 任何技能完成 | session-logger | 记录活动 |
-| 技能文件被修改 | create-pr | 提示创建 PR |
+| prd-planner 完成 | self-improving-agent | 记录 PRD 模式提案 |
+| prd-planner 完成 | session-logger | 宿主支持时保存会话 |
+| code-reviewer 完成 | self-improving-agent | 提取代码质量模式提案 |
+| 有价值的技能完成 | session-logger | 宿主支持时记录活动 |
+| 用户要求提交 | create-pr | 创建 PR |
 
 ---
 
@@ -327,7 +327,7 @@ Claude: [调用 create-pr]
 ### 最简流程
 
 ```
-1. 发送图片/需求 → prd-planner 自动创建 PRD
+1. 发送图片/需求 → prd-planner 创建 PRD
 2. 说"实现它" → 开始编码
 3. 说"review" → code-reviewer 审核
 4. 说"提交" → create-pr 提交 PR
@@ -337,7 +337,7 @@ Claude: [调用 create-pr]
 
 ```
 1. 发送需求 → 创建 PRD
-2. 说"审核 PRD" → self-improving-agent 改进
+2. 说"审核 PRD" → self-improving-agent 生成改进提案
 3. 说"实现" → 编写代码
 4. 说"review" → 代码审核
 5. 给反馈 → self-improving-agent 学习

@@ -1,6 +1,6 @@
 ---
 name: workflow-orchestrator
-description: Automatically coordinates multi-skill workflows and triggers follow-up actions. Use when completing PRD creation, implementation, or any milestone that should trigger additional skills. This skill reads the auto-trigger configuration and executes the workflow chain.
+description: Coordinates multi-skill workflows and records or runs follow-up actions when the host runtime supports them. Use when completing PRD creation, implementation, or any milestone that should be evaluated for additional skills.
 allowed-tools: Read, Write, Edit, Bash, Grep, AskUserQuestion
 metadata:
   hooks:
@@ -12,11 +12,13 @@ metadata:
 
 # Workflow Orchestrator
 
-A skill that automatically coordinates workflows across multiple skills, triggering follow-up actions at appropriate milestones.
+A skill that coordinates workflows across multiple skills by evaluating hook
+metadata, recording pending follow-ups, and running only the actions that are
+safe and supported in the current host runtime.
 
 ## When This Skill Activates
 
-This skill should be triggered automatically when:
+This skill should be used when:
 - A skill completes its main workflow
 - A milestone is reached (PRD complete, implementation done, etc.)
 - User says "complete workflow" or "finish the process"
@@ -28,7 +30,7 @@ This skill should be triggered automatically when:
 │                    Workflow Orchestration                   │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  1. Detect Milestone → 2. Read Hooks → 3. Execute Chain    │
+│  1. Detect Milestone → 2. Read Hooks → 3. Record/Run Safe Follow-ups │
 │                                                             │
 │  prd-planner complete                                       │
 │       ↓                                                     │
@@ -62,8 +64,8 @@ hooks:
 
 | Mode | Behavior | Use When |
 |------|----------|----------|
-| `auto` | Execute immediately, no confirmation | Logging, status updates |
-| `background` | Execute without blocking | Reflection, analysis |
+| `auto` | Run or record a low-risk follow-up when the host supports it | Logging, status updates |
+| `background` | Record a non-blocking follow-up | Reflection, analysis |
 | `ask_first` | Ask user before executing | PRs, deployments, major changes |
 
 ## Milestone Detection
@@ -77,8 +79,8 @@ Detected when:
 - Status shows "COMPLETE"
 
 Actions:
-1. Trigger self-improving-agent (background)
-2. Trigger session-logger (auto)
+1. Record self-improving-agent as a background follow-up
+2. Run or record session-logger if the host supports it
 ```
 
 ### Implementation Complete
@@ -90,9 +92,9 @@ Detected when:
 - Code committed
 
 Actions:
-1. Trigger code-reviewer (ask_first)
-2. Trigger create-pr if changes staged
-3. Trigger session-logger (auto)
+1. Ask before running code-reviewer
+2. Run create-pr only when the user requested submission
+3. Run or record session-logger if the host supports it
 ```
 
 ### Self-Improvement Complete
@@ -104,26 +106,27 @@ Detected when:
 - Skill files modified
 
 Actions:
-1. Trigger create-pr (ask_first)
-2. Trigger session-logger (auto)
+1. Ask before running create-pr
+2. Run or record session-logger if the host supports it
 ```
 
-### Universal Learning (Any Skill Complete)
+### Learning Candidate (Skill Complete)
 
 ```markdown
 Detected when:
-- ANY skill completes its workflow
+- A skill completes its workflow and produces reusable evidence
 - User provides feedback
 - Error or issue encountered
 
 Actions:
-1. Trigger self-improving-agent (background)
-2. Trigger session-logger (auto)
+1. Record self-improving-agent as a background follow-up
+2. Run or record session-logger if the host supports it
 
 The self-improving-agent:
 - Extracts experience from completed skill
 - Identifies patterns and insights
-- Updates related skills with learned patterns
+- Writes memory or proposal artifacts
+- Promotes validated changes only after explicit approval or strong evidence
 - Consolidates memory for future reference
 ```
 
@@ -135,17 +138,17 @@ Detected when:
 - User reports the guidance produced incorrect results
 
 Actions:
-1. Trigger self-improving-agent (background) for self-correction
-2. Trigger session-logger (auto) to capture error context
+1. Record self-improving-agent (background) for self-correction
+2. Run or record session-logger to capture error context
 
 ## Hook Implementation in Skills
 
-To enable auto-trigger, add this section to any skill's SKILL.md:
+To declare follow-up metadata, add this section to any skill's SKILL.md:
 
 ```markdown
 ## Auto-Trigger (After Completion)
 
-When this skill completes, automatically trigger:
+When this skill completes, record or run supported follow-ups:
 
 ```yaml
 hooks:
@@ -172,7 +175,7 @@ hooks:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                  ANY Skill Completes                        │
+│                  Skill Completes With Evidence              │
 └──────────────┬──────────────────────────────────────────────┘
                │
                ↓
@@ -184,9 +187,9 @@ hooks:
     ↓                   ↓
 self-improving-agent  session-logger
     ↓                   ↓
-Learn from experience  Save context
+Capture proposal      Save context
     ↓                   ↓
-Update skills         Log session
+Validate changes      Log session
     ↓
 create-pr (if modified)
 ```
@@ -206,8 +209,8 @@ Phase 6 complete: PRD delivered
 workflow-orchestrator detects milestone
         ↓
 ┌─────────────────────────────────┐
-│ Background: self-improving-agent │ → Learns from PRD patterns
-│ Auto: session-logger             │ → Saves session
+│ Background: self-improving-agent │ → Records learning proposal
+│ Auto: session-logger             │ → Saves session when supported
 └─────────────────────────────────┘
 ```
 
@@ -231,7 +234,8 @@ create-pr → workflow-orchestrator
 session-logger
 ```
 
-Each step triggers `self-improving-agent` to learn from the experience.
+Each milestone can produce a `self-improving-agent` follow-up, but durable
+skill edits still require validation or explicit approval.
 
 ## Implementation Steps
 
@@ -257,11 +261,11 @@ ls docs/{scope}-prd.md
 cat skills/auto-trigger/SKILL.md
 ```
 
-### Step 3: Execute Hooks
+### Step 3: Record or Execute Hooks
 
 For each hook in order (before_start, after_complete, on_error):
 1. Check if condition is met
-2. Execute based on mode
+2. Record or execute based on mode and host support
 3. Pass context to triggered skill
 4. Wait/continue based on mode
 
@@ -289,16 +293,16 @@ Log what was triggered and the result:
 | `refactoring-specialist` | self-improving-agent, session-logger |
 | `debugger` | self-improving-agent, session-logger |
 
-## Adding Auto-Trigger to Existing Skills
+## Adding Follow-up Metadata to Existing Skills
 
-To add auto-trigger capability to an existing skill, add to the end of its SKILL.md:
+To add follow-up metadata to an existing skill, add to the end of its SKILL.md:
 
 ```markdown
 ---
 
 ## Auto-Trigger
 
-When this skill completes, automatically trigger:
+When this skill completes, record or run supported follow-ups:
 
 ```yaml
 hooks:

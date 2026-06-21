@@ -438,13 +438,13 @@ Phase 1: Initializing files
 ## References
 
 - [planning-with-files](../planning-with-files/) - File-based planning methodology
-- [architecting-solutions](../architecting-solutions/) - PRD creation best practices
+- [architecting-solutions](../architecting-solutions/) - Non-PRD solution and architecture design
 - Edge case scanning: `references/edge-case-analysis.md`
 
 ---
 
-## Auto-Trigger (Automation)
+## Auto-Trigger (Follow-up Metadata)
 
-When this skill completes, automatically trigger:
-1. **self-improving-agent** (background) - Extract patterns
-2. **session-logger** (auto) - Save session context
+When this skill completes, record or run supported follow-ups:
+1. **self-improving-agent** (background) - Propose reusable patterns
+2. **session-logger** (auto) - Save session context when supported

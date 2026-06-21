@@ -1,6 +1,6 @@
 # Technical Design: Agent Playbook One-Click Setup and Skill Workflow Fixes
 
-> Status: DRAFT
+> Status: Historical technical design / partially implemented
 > Last updated: 2026-01-20 16:39
 
 ## Overview
@@ -70,8 +70,8 @@ Deliver a Node-based CLI distributed via NPM/PNPM (`@codeharbor/agent-playbook`)
 
 ### Self-Improvement MVP
 - On PostToolUse/SessionEnd:
-  - Append a raw entry into `~/.claude/memory/episodic/`.
-  - Update `~/.claude/memory/working/current_session.json`.
+  - Append a bounded metadata entry into `~/.claude/memory/episodic/`.
+  - Update working-memory state under `~/.claude/memory/working/`.
 - Optional future enhancement: LLM summarization and pattern extraction.
 
 ## Migration Plan

@@ -135,9 +135,9 @@ skill-name/
 
 ### 核心概念
 
-#### 自动触发 (Auto-Trigger)
+#### Hook 后续动作 (Auto-Trigger Metadata)
 
-当一个 Skill 完成时，自动触发下一个 Skill：
+当一个 Skill 完成时，可以在 hook 元数据中声明后续动作。是否立即执行取决于宿主运行时支持和动作风险：
 
 ```yaml
 hooks:
@@ -152,7 +152,7 @@ hooks:
 
 | 模式 | 行为 | 使用场景 |
 |------|------|----------|
-| `auto` | 立即执行，阻塞等待 | 保存会话 |
+| `auto` | 宿主可执行或记录低风险后续动作 | 保存会话 |
 | `background` | 后台运行，不等待 | 学习模式 |
 | `ask_first` | 询问用户后执行 | 创建 PR |
 
@@ -385,29 +385,47 @@ response = client.chat.completions.create(
 )
 ```
 
-### Codex / OpenAI
+### OpenAI Codex / OpenAI API
 
 **优势：**
-- GitHub Copilot 集成
+- Codex 面向代码任务和本地/云端开发工作流
 - 代码生成能力极强
 - 丰富的生态支持
 
 **快速开始：**
 ```python
-# OpenAI 函数调用
+# OpenAI Responses API + tools
 from openai import OpenAI
 
 client = OpenAI()
 
 skill = open("skills/prd-planner/SKILL.md").read()
 
-response = client.chat.completions.create(
-    model="gpt-4",
-    messages=[
-        {"role": "system", "content": skill},
+tools = [
+    {
+        "type": "function",
+        "name": "write_prd_file",
+        "description": "Write the generated PRD to a markdown file.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "content": {"type": "string"}
+            },
+            "required": ["path", "content"],
+            "additionalProperties": False
+        },
+        "strict": True
+    }
+]
+
+response = client.responses.create(
+    model="gpt-5.5",
+    instructions=skill,
+    input=[
         {"role": "user", "content": "创建用户认证 PRD"}
     ],
-    functions=[...],  # 类似 Tools
+    tools=tools,
 )
 ```
 
@@ -435,7 +453,7 @@ response = client.chat.completions.create(
 - [ ] 测试不同平台的兼容性
 
 ### Week 3-4: Level 3
-- [ ] 学习 Hooks 和自动触发
+- [ ] 学习 Hooks 和后续动作元数据
 - [ ] 构建第一个完整工作流
 - [ ] 实现多 Skill 协作
 

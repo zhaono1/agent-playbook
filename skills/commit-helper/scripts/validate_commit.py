@@ -7,6 +7,19 @@ import re
 import sys
 
 
+def suggest_imperative(word: str) -> str:
+    if word.endswith("ied") and len(word) > 3:
+        return word[:-3] + "y"
+    if word.endswith("ed") and len(word) > 2:
+        base = word[:-2]
+        if base.endswith(("at", "it", "op", "er")):
+            return base[:-1]
+        return base
+    if word.endswith("ing") and len(word) > 3:
+        return word[:-3]
+    return word
+
+
 def validate_commit_message(message: str) -> tuple[bool, str]:
     """
     Validate a commit message against Conventional Commits format.
@@ -23,13 +36,14 @@ def validate_commit_message(message: str) -> tuple[bool, str]:
     lines = message.split('\n')
     subject = lines[0]
 
-    # Validate subject line format: type(scope): subject
-    pattern = r'^(feat|fix|docs|style|refactor|perf|test|chore|ci|build)(\(.+\))?: .{1,50}$'
+    # Validate subject line format: type(scope)!: subject
+    types = "feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert"
+    pattern = rf'^({types})(\([A-Za-z0-9_.-]+\))?(!)?: .{{1,72}}$'
     if not re.match(pattern, subject):
         return False, (
-            "Invalid format. Expected: type(scope): subject\n"
-            "- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore, ci, build\n"
-            "- Subject must be 1-50 characters\n"
+            "Invalid format. Expected: type(scope)!: subject\n"
+            "- Type must be one of: feat, fix, docs, style, refactor, perf, test, chore, ci, build, revert\n"
+            "- Subject must be 1-72 characters\n"
             "- Use imperative mood (e.g., 'add feature' not 'added feature')"
         )
 
@@ -42,8 +56,9 @@ def validate_commit_message(message: str) -> tuple[bool, str]:
     if words:
         first_word = words[0].lower()
         # Common past tense indicators
-        if first_word.endswith(('ed', 'ing')) and first_word not in ['added', 'building']:
-            return False, f"Subject should use imperative mood ('{first_word}' → '{first_word.rstrip('ed')}')"
+        if first_word.endswith(('ed', 'ing')):
+            suggestion = suggest_imperative(first_word)
+            return False, f"Subject should use imperative mood ('{first_word}' -> '{suggestion}')"
 
     # Validate body format (if present)
     if len(lines) > 1:
