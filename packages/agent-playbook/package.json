@@ -1,7 +1,7 @@
 {
   "name": "@codeharbor/agent-playbook",
-  "version": "0.3.2",
-  "description": "Local skill manager and installer for agent-playbook across Claude Code, Codex, and Gemini.",
+  "version": "0.4.0",
+  "description": "Local skill manager and validated learning lifecycle for Claude Code, Codex, Gemini, and DeepSeek Harness.",
   "license": "MIT",
   "type": "commonjs",
   "bin": {

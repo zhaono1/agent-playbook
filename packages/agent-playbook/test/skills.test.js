@@ -24,10 +24,12 @@ test("skills list returns global skills across targets", () => {
   const claudeDir = path.join(tempDir, "claude");
   const codexDir = path.join(tempDir, "codex");
   const geminiDir = path.join(tempDir, "gemini");
+  const dshDir = path.join(tempDir, "dsh");
 
   writeSkill(path.join(claudeDir, "skills"), "alpha");
   writeSkill(path.join(codexDir, "skills"), "bravo");
   writeSkill(path.join(geminiDir, "skills"), "charlie");
+  writeSkill(path.join(dshDir, "skills"), "delta");
 
   const result = spawnSync(
     process.execPath,
@@ -39,6 +41,7 @@ test("skills list returns global skills across targets", () => {
         AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
         AGENT_PLAYBOOK_CODEX_DIR: codexDir,
         AGENT_PLAYBOOK_GEMINI_DIR: geminiDir,
+        AGENT_PLAYBOOK_DSH_DIR: dshDir,
       },
     }
   );
@@ -49,6 +52,43 @@ test("skills list returns global skills across targets", () => {
   assert.ok(names.includes("alpha"));
   assert.ok(names.includes("bravo"));
   assert.ok(names.includes("charlie"));
+  assert.ok(names.includes("delta"));
+});
+
+test("skills add installs a DeepSeek Harness project skill", () => {
+  const tempDir = makeTempDir();
+  const sourceRoot = path.join(tempDir, "source");
+  const sourceDir = path.join(sourceRoot, "dsh-skill");
+  writeSkill(sourceRoot, "dsh-skill");
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "skills",
+      "add",
+      sourceDir,
+      "--scope",
+      "global",
+      "--target",
+      "deepseek",
+      "--copy",
+      "--overwrite",
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AGENT_PLAYBOOK_CLAUDE_DIR: path.join(tempDir, "claude"),
+        AGENT_PLAYBOOK_CODEX_DIR: path.join(tempDir, "codex"),
+        AGENT_PLAYBOOK_GEMINI_DIR: path.join(tempDir, "gemini"),
+        AGENT_PLAYBOOK_DSH_DIR: path.join(tempDir, "dsh"),
+      },
+    }
+  );
+
+  assert.strictEqual(result.status, 0);
+  assert.ok(fs.existsSync(path.join(tempDir, "dsh", "skills", "dsh-skill", "SKILL.md")));
 });
 
 test("skills add writes state and copies skill", () => {

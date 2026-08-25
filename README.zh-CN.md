@@ -1,6 +1,6 @@
 # Agent Playbook
 
-> AI Agent (Claude Code) 实用指南、提示词和技能集合
+> 面向 Coding Agent 的可移植技能、本地生命周期工具和工作流模式
 
 [English](./README.md) | 简体中文
 
@@ -8,7 +8,7 @@
 
 本仓库整理并存储了使用 Claude Code 等 AI Agent 的实用资源，包括提示词模板、自定义技能、使用示例和最佳实践。
 
-本仓库只放适合公开分享、可迁移的 Agent 构建模块：可复用技能、提示词模式、工作流文档，以及面向 Claude Code、Codex、Gemini 的本地工具链。
+本仓库只放适合公开分享、可迁移的 Agent 构建模块：可复用技能、提示词模式、工作流文档，以及面向 Claude Code、Codex、Gemini、DeepSeek Harness 的本地工具链。
 
 所有内容都尽量保持抽象和可移植。私有运行细节、公司专属流程、敏感业务上下文应放在其他私有位置。
 
@@ -32,6 +32,7 @@
 
 - [Agent Playbook 的上下文分层](./docs/context-layering-for-agent-playbooks.md)
 - [Skill 生态参考](./docs/skill-ecosystem-references.md)
+- [集成与产品化路线图](./docs/integrations-and-product-roadmap.md)
 - [long-task-coordinator](./skills/long-task-coordinator/)
 
 ## 适合谁使用
@@ -44,7 +45,7 @@
 
 ### 方法零：一键安装（PNPM/NPM）
 
-为 Claude Code、Codex 和 Gemini 配置技能。目前会为 Claude Code 接入会话日志与自我进化 hooks，为 Codex 写入 `agent_playbook` 元数据块，并为 Gemini 准备技能目录。
+为 Claude Code、Codex、Gemini 和 DeepSeek Harness 配置技能。目前会为 Claude Code 接入会话日志与隐私安全的失败捕获，为 Codex 写入 `agent_playbook` 元数据块，并为其他宿主准备技能目录。
 
 ```bash
 pnpm dlx @codeharbor/agent-playbook init
@@ -63,12 +64,13 @@ pnpm dlx @codeharbor/agent-playbook init --project
 将技能链接到全局技能目录：
 
 ```bash
-mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills
+mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills ~/.dsh/skills
 for skill in /path/to/agent-playbook/skills/*; do
   [ -f "$skill/SKILL.md" ] || continue
   ln -s "$skill" ~/.claude/skills/
   ln -s "$skill" ~/.codex/skills/
   ln -s "$skill" ~/.gemini/skills/
+  ln -s "$skill" ~/.dsh/skills/
 done
 ```
 
@@ -76,9 +78,9 @@ done
 
 ```bash
 # 链接单个技能
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/skill-router ~/.claude/skills/skill-router
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/architecting-solutions ~/.claude/skills/architecting-solutions
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/planning-with-files ~/.claude/skills/planning-with-files
+ln -s /path/to/agent-playbook/skills/skill-router ~/.claude/skills/skill-router
+ln -s /path/to/agent-playbook/skills/architecting-solutions ~/.claude/skills/architecting-solutions
+ln -s /path/to/agent-playbook/skills/planning-with-files ~/.claude/skills/planning-with-files
 ```
 
 ### 方法二：复制技能
@@ -86,26 +88,28 @@ ln -s ~/Documents/code/GitHub/agent-playbook/skills/planning-with-files ~/.claud
 直接将技能复制到全局技能目录：
 
 ```bash
-mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills
+mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills ~/.dsh/skills
 for skill in /path/to/agent-playbook/skills/*; do
   [ -f "$skill/SKILL.md" ] || continue
   cp -R "$skill" ~/.claude/skills/
   cp -R "$skill" ~/.codex/skills/
   cp -R "$skill" ~/.gemini/skills/
+  cp -R "$skill" ~/.dsh/skills/
 done
 ```
 
 ### 方法三：添加到项目特定技能
 
-用于项目特定用途，在项目中创建 `.claude/.codex/.gemini` 技能目录：
+用于项目特定用途，在项目中创建各宿主的技能目录：
 
 ```bash
-mkdir -p .claude/skills .codex/skills .gemini/skills
+mkdir -p .claude/skills .codex/skills .gemini/skills .dsh/skills
 for skill in /path/to/agent-playbook/skills/*; do
   [ -f "$skill/SKILL.md" ] || continue
   cp -R "$skill" .claude/skills/
   cp -R "$skill" .codex/skills/
   cp -R "$skill" .gemini/skills/
+  cp -R "$skill" .dsh/skills/
 done
 ```
 
@@ -117,6 +121,7 @@ done
 ls -la ~/.claude/skills/
 ls -la ~/.codex/skills/
 ls -la ~/.gemini/skills/
+ls -la ~/.dsh/skills/
 ```
 
 ## 技能管理
@@ -126,17 +131,38 @@ ls -la ~/.gemini/skills/
 ```bash
 apb skills list --scope both --target all
 apb skills add ./skills/my-skill --scope project --target claude
+apb skills add ./skills/my-skill --scope project --target deepseek
 ```
 
 `apb` 是 `agent-playbook` 的短别名。
+
+## 可验证的自我改进
+
+先捕获可复用纠正，再评审候选；只有代表性检查通过后才能提升：
+
+```bash
+apb self-improve capture --kind correction --summary "使用缓存状态前先核对当前权威来源" --evidence "focused-test"
+apb self-improve list
+apb self-improve review cand-... --decision promote --reason "回归测试通过" --validated
+```
+
+可以把评审结果导出到 Obsidian 或其他本地 Markdown 知识系统：
+
+```bash
+apb self-improve export --output /path/to/vault/Agent/Learning.md
+```
+
+Claude 自动捕获只观察失败事件，不保存原始工具输入或输出。详见
+[自我改进示例](./docs/self-improvement-example.md)。
 
 ## 平台支持情况
 
 | 平台 | 技能安装 | Hook / 配置自动化 | 当前状态 |
 |------|----------|-------------------|----------|
-| Claude Code | 支持 | 自动安装 SessionEnd 与 PostToolUse hooks | 完整 |
+| Claude Code | 支持 | 自动安装 SessionEnd 与 PostToolUseFailure hooks | 完整 |
 | Codex | 支持 | 向 `~/.codex/config.toml` 写入 `agent_playbook` 元数据块 | 部分支持 |
 | Gemini | 支持 | 暂无 hook 自动接入 | 仅技能分发 |
+| DeepSeek Harness | 支持 | 暂无 hook 自动接入 | 仅技能分发 |
 
 MCP server 是独立的可选集成，目前文档以 Claude Code 为主。
 
@@ -162,7 +188,7 @@ agent-playbook/
 | **[session-logger](./skills/session-logger/)** | 保存对话历史到会话日志文件 | 由宿主 hook 支持 |
 | **[auto-trigger](./skills/auto-trigger/)** | 记录技能之间的后续动作 hook 元数据 | 仅配置 |
 | **[workflow-orchestrator](./skills/workflow-orchestrator/)** | 协调多技能工作流并记录受支持的后续动作 | 手动 / 由宿主 hook 支持 |
-| **[self-improving-agent](./skills/self-improving-agent/)** | 捕获学习产物并提出经过验证的改进 | 手动 / 后台后续动作 |
+| **[self-improving-agent](./skills/self-improving-agent/)** | 捕获隐私安全的候选经验，只提升已验证规则 | 失败 hook / 手动评审 |
 
 ### 核心开发
 
@@ -269,15 +295,15 @@ code-reviewer → self-improving-agent → create-pr
 
 ## AI Agent 学习路径
 
-**[docs/ai-agent-learning-path.md](./docs/ai-agent-learning-path.md)** - 适用于 Claude、GLM、Codex 的渐进式 Agent 开发学习路径：
+**[docs/ai-agent-learning-path.md](./docs/ai-agent-learning-path.md)** - 构建可移植、可验证 Agent 工作流的渐进式学习路径：
 
 | Level | 主题 | 时间 | 产出 |
 |-------|------|------|------|
 | 1 | 提示工程基础 | 1 周 | 完成单一任务工作流 |
 | 2 | Skill 开发 | 1 周 | 交付第一个可复用 Skill |
 | 3 | 工作流编排 | 2 周 | 构建完整自动化流程 |
-| 4 | 自学习系统 | 2-3 周 | 让 Agent 能从经验中学习 |
-| 5 | 自进化 Agent | 2-3 周 | 构建更自主的改进闭环 |
+| 4 | 可验证学习系统 | 2-3 周 | 把证据转化为经评审的行为变化 |
+| 5 | 跨 Harness 改进 | 2-3 周 | 通过薄适配器共享同一学习闭环 |
 
 ## 完整工作流示例
 

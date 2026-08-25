@@ -2,6 +2,9 @@
 
 > Status: Historical technical design / partially implemented
 > Last updated: 2026-01-20 16:39
+> Superseded for self-improvement and host support by
+> [Integrations and Product Roadmap](./integrations-and-product-roadmap.md) and
+> [Self-Improvement Example](./self-improvement-example.md).
 
 ## Overview
 Deliver a Node-based CLI distributed via NPM/PNPM (`@codeharbor/agent-playbook`) that links skills into Claude Code and Codex locations, merges hook configuration safely, and installs hook scripts to enable session logging and self-improvement capture.

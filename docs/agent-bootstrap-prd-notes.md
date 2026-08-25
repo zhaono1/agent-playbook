@@ -24,7 +24,7 @@
 - Current docs recommend symlinking skills to `~/.claude/skills` or copying into `.claude/skills` (README).
 - Auto-trigger and workflow-orchestrator are documented but there is no runtime automation in this repo; `session-logger` is manual by default.
 - `self-improving-agent` requires hooks configured in Claude Code settings; hook scripts should avoid logging raw tool payloads.
-- `skills/self-improving-agent/memory` only contains `semantic-patterns.json`; episodic/working memory directories are not present.
+- At the time, the skill shipped only a static semantic-memory sample. v0.4 removed that unused sample in favor of the validated local candidate lifecycle.
 - MCP server exists for skill discovery; current Claude Code MCP configuration should use `claude mcp add`, `.mcp.json`, or `~/.claude.json` depending on scope.
 - The local `~/.claude/settings.json` observation below was a dated machine snapshot and should be rechecked before use.
 - The local `~/.claude/skills` observation below was a dated machine snapshot and should be rechecked before use.

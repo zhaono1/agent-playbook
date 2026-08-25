@@ -11,20 +11,20 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 const skillsDir = path.join(repoRoot, "skills");
 
 test("extractFrontMatter parses nested metadata and hyphenated keys", async () => {
-  const content = await fs.readFile(path.join(skillsDir, "self-improving-agent", "SKILL.md"), "utf8");
+  const content = await fs.readFile(path.join(skillsDir, "code-reviewer", "SKILL.md"), "utf8");
   const frontMatter = extractFrontMatter(content);
 
-  assert.equal(frontMatter.name, "self-improving-agent");
+  assert.equal(frontMatter.name, "code-reviewer");
   assert.ok(frontMatter.metadata?.hooks?.after_complete?.length > 0);
   assert.equal(typeof frontMatter["allowed-tools"], "string");
 });
 
-test("getSkill returns parsed hooks and allowed tools", async () => {
+test("getSkill returns the current self-improvement contract", async () => {
   const parsed = JSON.parse(await getSkill("self-improving-agent", false, { skillsDir }));
 
   assert.ok(parsed.allowed_tools.includes("Read"));
-  assert.ok(parsed.allowed_tools.includes("WebSearch"));
-  assert.ok(parsed.hooks.after_complete.length > 0);
+  assert.ok(!parsed.allowed_tools.includes("WebSearch"));
+  assert.equal(parsed.hooks, null);
 });
 
 test("getSkill rejects non-canonical skill names", async () => {

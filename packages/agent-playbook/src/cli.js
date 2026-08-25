@@ -3,6 +3,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const crypto = require("crypto");
 
 const PACKAGE_NAME = "@codeharbor/agent-playbook";
 const APP_NAME = "agent-playbook";
@@ -12,9 +13,12 @@ const LOCAL_CLI_DIR = "agent-playbook";
 const HOOK_SOURCE_VALUE = "agent-playbook";
 const STATE_FILE_NAME = "state.json";
 const DISABLED_DIR_NAME = ".disabled";
+const SELF_IMPROVEMENT_DIR_NAME = "self-improvement";
+const SELF_IMPROVEMENT_SCHEMA_VERSION = "1";
+const MAX_CANDIDATE_EVIDENCE = 10;
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const VALID_SKILL_SCOPES = new Set(["project", "global"]);
-const VALID_SKILL_TARGETS = new Set(["claude", "codex", "gemini"]);
+const VALID_SKILL_TARGETS = new Set(["claude", "codex", "gemini", "dsh"]);
 const VALID_INSTALL_MODES = new Set(["link", "copy"]);
 
 const packageJson = readJsonSafe(path.join(__dirname, "..", "package.json"));
@@ -39,7 +43,7 @@ function main(argv, context) {
     case "session-log":
       return handleSessionLog(options);
     case "self-improve":
-      return handleSelfImprove(options);
+      return handleSelfImprove(options, parsed.positionals);
     case "skills":
       return handleSkills(options, parsed.positionals, context);
     case "upgrade":
@@ -67,7 +71,10 @@ function printHelp() {
     "",
     "Hook commands:",
     `  ${APP_NAME} session-log [--session-dir <path>]`,
-    `  ${APP_NAME} self-improve`,
+    `  ${APP_NAME} self-improve [capture] [--kind <kind>] [--summary <text>] [--evidence <text>]`,
+    `  ${APP_NAME} self-improve list [--status <status>] [--format json]`,
+    `  ${APP_NAME} self-improve review <candidate-id> --decision <promote|observe|reject> --reason <text> [--validated]`,
+    `  ${APP_NAME} self-improve export --output <markdown-file>`,
     "",
     "Other commands:",
     `  ${APP_NAME} upgrade`,
@@ -87,6 +94,13 @@ function parseArgs(argv) {
     "format",
     "source",
     "output",
+    "data-dir",
+    "kind",
+    "summary",
+    "evidence",
+    "status",
+    "decision",
+    "reason",
   ]);
   const options = {};
   const positionals = [];
@@ -154,6 +168,7 @@ function handleInit(options, context) {
   ensureDir(settings.claudeSkillsDir, options["dry-run"]);
   ensureDir(settings.codexSkillsDir, options["dry-run"]);
   ensureDir(settings.geminiSkillsDir, options["dry-run"]);
+  ensureDir(settings.dshSkillsDir, options["dry-run"]);
 
   const manifest = {
     name: APP_NAME,
@@ -165,19 +180,23 @@ function handleInit(options, context) {
       claude: [],
       codex: [],
       gemini: [],
+      dsh: [],
     },
   };
 
   let claudeLinks = { created: [], skipped: [] };
   let codexLinks = { created: [], skipped: [] };
   let geminiLinks = { created: [], skipped: [] };
+  let dshLinks = { created: [], skipped: [] };
   if (settings.skillsSource) {
     claudeLinks = linkSkills(settings.skillsSource, settings.claudeSkillsDir, options, overwriteState);
     codexLinks = linkSkills(settings.skillsSource, settings.codexSkillsDir, options, overwriteState);
     geminiLinks = linkSkills(settings.skillsSource, settings.geminiSkillsDir, options, overwriteState);
+    dshLinks = linkSkills(settings.skillsSource, settings.dshSkillsDir, options, overwriteState);
     manifest.links.claude = claudeLinks.created;
     manifest.links.codex = codexLinks.created;
     manifest.links.gemini = geminiLinks.created;
+    manifest.links.dsh = dshLinks.created;
 
     if (!options["dry-run"]) {
       writeJson(path.join(settings.claudeSkillsDir, ".agent-playbook.json"), manifest);
@@ -194,7 +213,16 @@ function handleInit(options, context) {
 
   updateCodexConfig(settings, options);
 
-  printInitSummary(settings, hooksEnabled, options, claudeLinks, codexLinks, geminiLinks, warnings);
+  printInitSummary(
+    settings,
+    hooksEnabled,
+    options,
+    claudeLinks,
+    codexLinks,
+    geminiLinks,
+    dshLinks,
+    warnings
+  );
   return Promise.resolve();
 }
 
@@ -231,6 +259,7 @@ function handleUninstall(options, context) {
     removeLinks(manifest.links.claude || []);
     removeLinks(manifest.links.codex || []);
     removeLinks(manifest.links.gemini || []);
+    removeLinks(manifest.links.dsh || []);
     safeUnlink(manifestPath);
   } else {
     console.log("No manifest found. Skipping link removal.");
@@ -264,90 +293,55 @@ async function handleSessionLog(options) {
   console.error(`Session log saved to ${outputPath}`);
 }
 
-async function handleSelfImprove(options) {
+async function handleSelfImprove(options, positionals) {
+  const subcommand = positionals[0] || "capture";
+  if (subcommand === "list") {
+    return handleSelfImproveList(options);
+  }
+  if (subcommand === "review") {
+    return handleSelfImproveReview(options, positionals.slice(1));
+  }
+  if (subcommand === "export") {
+    return handleSelfImproveExport(options);
+  }
+  if (subcommand !== "capture") {
+    console.error(`Unknown self-improve subcommand: ${subcommand}`);
+    process.exitCode = 1;
+    return;
+  }
+
   const input = await readStdinJson();
-  const cwd = input.cwd || process.cwd();
-  const sessionId = input.session_id || "unknown";
-  const transcriptPath = input.transcript_path || "";
+  const signal = buildLearningSignal(input, options);
+  if (!signal) {
+    console.error("No reusable learning signal captured.");
+    return;
+  }
+
+  const env = resolveSelfImprovementEnvironment(options);
   const now = new Date();
-  const memoryRoot = path.join(os.homedir(), ".claude", "memory");
-  const episodicDir = path.join(memoryRoot, "episodic", String(now.getFullYear()));
-  const workingDir = path.join(memoryRoot, "working");
-  const triggersDir = path.join(memoryRoot, "triggers");
-
-  ensureDir(episodicDir, false);
-  ensureDir(workingDir, false);
-  ensureDir(triggersDir, false);
-
-  const toolName = input.tool_name || "";
-  const toolInput = input.tool_input || {};
-  const toolOutput = input.tool_output || {};
-  const hookEvent = input.hook_event_name || "PostToolUse";
-
-  const entry = {
-    id: `ep-${now.toISOString()}`.replace(/[:.]/g, "-"),
+  const candidateStore = loadCandidateStore(env.candidatesPath);
+  const candidate = upsertLearningCandidate(candidateStore, signal, now);
+  const event = {
+    schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION,
+    id: createEventId(now),
     timestamp: now.toISOString(),
-    session_id: sessionId,
-    cwd,
-    transcript_path: transcriptPath,
+    candidate_id: candidate.id,
+    kind: signal.kind,
+    summary: signal.summary,
+    evidence: signal.evidence,
+    scope: signal.scope,
+    source: signal.source,
     agent_playbook_version: VERSION,
-    hook_event: hookEvent,
-    tool_name: toolName,
-    tool_input: toolInput,
-    tool_output: typeof toolOutput === "string" ? toolOutput.slice(0, 2000) : toolOutput,
   };
 
-  // Detect skill invocations and completions
-  if (toolName === "Skill") {
-    const skillName = toolInput.skill || "";
-    entry.skill_invoked = skillName;
-    entry.skill_args = toolInput.args || "";
-
-    // Track skill start in working memory
-    const skillStatePath = path.join(workingDir, "active_skills.json");
-    const skillState = readJsonSafe(skillStatePath) || { active: [], history: [] };
-
-    if (!skillState.active.includes(skillName)) {
-      skillState.active.push(skillName);
-      skillState.history.push({
-        skill: skillName,
-        started_at: now.toISOString(),
-        session_id: sessionId,
-      });
-      writeJson(skillStatePath, skillState);
-    }
-  }
-
-  // Detect skill completion patterns in tool output
-  const skillCompletion = detectSkillCompletion(toolName, toolInput, toolOutput, cwd);
-  if (skillCompletion) {
-    entry.skill_completed = skillCompletion.skill;
-    entry.completion_type = skillCompletion.type;
-
-    // Update active skills state
-    const skillStatePath = path.join(workingDir, "active_skills.json");
-    const skillState = readJsonSafe(skillStatePath) || { active: [], history: [] };
-    skillState.active = skillState.active.filter((s) => s !== skillCompletion.skill);
-
-    const historyEntry = skillState.history.find(
-      (h) => h.skill === skillCompletion.skill && !h.completed_at
-    );
-    if (historyEntry) {
-      historyEntry.completed_at = now.toISOString();
-      historyEntry.completion_type = skillCompletion.type;
-    }
-    writeJson(skillStatePath, skillState);
-
-    // Create trigger file for skill chaining
-    createSkillTrigger(triggersDir, skillCompletion, sessionId, cwd, now, resolveRuntimeSkillsSource(cwd));
-  }
-
-  const entryPath = path.join(episodicDir, `${entry.id}.json`);
-  fs.writeFileSync(entryPath, JSON.stringify(entry, null, 2));
-
-  const workingPath = path.join(workingDir, "current_session.json");
-  fs.writeFileSync(workingPath, JSON.stringify(entry, null, 2));
-  console.error(`Self-improvement entry saved to ${entryPath}`);
+  ensureDir(path.dirname(env.candidatesPath), false);
+  ensureDir(path.join(env.eventsDir, now.toISOString().slice(0, 7)), false);
+  writeJsonAtomic(env.candidatesPath, candidateStore);
+  writeJsonAtomic(
+    path.join(env.eventsDir, now.toISOString().slice(0, 7), `${event.id}.json`),
+    event
+  );
+  console.error(`Learning candidate ${candidate.id} captured (${candidate.occurrences} occurrence(s)).`);
 }
 
 async function handleUpgrade(options) {
@@ -379,213 +373,270 @@ async function handleUpgrade(options) {
   }
 }
 
-function detectSkillCompletion(toolName, toolInput, toolOutput, cwd) {
-  const outputStr = typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput);
-
-  // Detect PRD completion
-  if (toolName === "Write" || toolName === "Edit") {
-    const filePath = toolInput.file_path || "";
-    if (filePath.includes("-prd.md") || filePath.includes("prd-task-plan.md")) {
-      if (outputStr.includes("COMPLETE") || outputStr.includes("Phase 6")) {
-        return { skill: "prd-planner", type: "prd_complete", file: filePath };
-      }
-    }
-  }
-
-  // Detect commit completion (commit-helper)
-  if (toolName === "Bash") {
-    const command = toolInput.command || "";
-    if (command.includes("git commit") && !outputStr.includes("error") && !outputStr.includes("fatal")) {
-      return { skill: "commit-helper", type: "commit_complete", command };
-    }
-  }
-
-  // Detect PR creation (create-pr)
-  if (toolName === "Bash") {
-    const command = toolInput.command || "";
-    if (command.includes("gh pr create") && outputStr.includes("github.com")) {
-      const prUrlMatch = outputStr.match(/https:\/\/github\.com\/[^\s]+\/pull\/\d+/);
-      return {
-        skill: "create-pr",
-        type: "pr_created",
-        pr_url: prUrlMatch ? prUrlMatch[0] : null,
-      };
-    }
-  }
-
-  // Detect test completion
-  if (toolName === "Bash") {
-    const command = toolInput.command || "";
-    if (
-      (command.includes("npm test") ||
-        command.includes("bun test") ||
-        command.includes("pytest") ||
-        command.includes("go test")) &&
-      (outputStr.includes("passed") || outputStr.includes("PASS"))
-    ) {
-      return { skill: "test-automator", type: "tests_passed", command };
-    }
-  }
-
-  // Detect session log creation
-  if (toolName === "Write") {
-    const filePath = toolInput.file_path || "";
-    if (filePath.includes("sessions/") && filePath.endsWith(".md")) {
-      return { skill: "session-logger", type: "session_saved", file: filePath };
-    }
-  }
-
-  return null;
-}
-
-function createSkillTrigger(triggersDir, completion, sessionId, cwd, now, skillsSource) {
-  const triggerFile = path.join(
-    triggersDir,
-    `${completion.skill}-${now.toISOString().replace(/[:.]/g, "-")}.json`
-  );
-
-  const trigger = {
-    source_skill: completion.skill,
-    completion_type: completion.type,
-    timestamp: now.toISOString(),
-    session_id: sessionId,
-    cwd,
-    details: completion,
-    pending_triggers: getHooksForSkill(completion.skill, completion.type, skillsSource),
+function resolveSelfImprovementEnvironment(options) {
+  const configuredRoot = options["data-dir"] || process.env.AGENT_PLAYBOOK_DATA_DIR;
+  const dataRoot = configuredRoot
+    ? path.resolve(configuredRoot)
+    : path.join(os.homedir(), ".agent-playbook");
+  const root = path.join(dataRoot, SELF_IMPROVEMENT_DIR_NAME);
+  return {
+    root,
+    candidatesPath: path.join(root, "candidates.json"),
+    activeRulesPath: path.join(root, "active-rules.json"),
+    eventsDir: path.join(root, "events"),
   };
-
-  writeJson(triggerFile, trigger);
-  console.error(`Skill trigger created: ${completion.skill} -> ${trigger.pending_triggers.map((t) => t.trigger).join(", ") || "none"}`);
 }
 
-function getHooksForSkill(skillName, completionType, skillsSource) {
-  const hooks = readSkillHooks(skillName, skillsSource);
-  return hooks.after_complete || [];
-}
-
-function resolveRuntimeSkillsSource(cwd) {
-  const repoRoot = findRepoRoot(cwd) || cwd;
-  return resolveSkillsSource([
-    repoRoot,
-    path.resolve(__dirname, ".."),
-    path.join(os.homedir(), ".claude"),
-    path.join(os.homedir(), ".codex"),
+function buildLearningSignal(input, options) {
+  const manualSummary = sanitizeLearningText(options.summary, 240);
+  const cwd = input.cwd || process.cwd();
+  const toolName = sanitizeLearningText(input.tool_name || "tool", 60);
+  const hookEvent = sanitizeLearningText(input.hook_event_name || "manual", 60);
+  const rawError = firstNonEmptyValue([
+    input.error,
+    input.tool_error,
+    input.tool_response && input.tool_response.error,
+    input.tool_output && input.tool_output.error,
   ]);
-}
+  const isFailure = hookEvent === "PostToolUseFailure" || Boolean(rawError);
 
-function readSkillHooks(skillName, skillsSource) {
-  if (!skillsSource || !isValidSkillName(skillName)) {
-    return {};
+  if (!manualSummary && !isFailure) {
+    return null;
   }
 
-  const skillPath = resolveInside(skillsSource, skillName, "SKILL.md");
-  if (!skillPath || !fs.existsSync(skillPath)) {
-    return {};
-  }
+  const kind = sanitizeLearningKind(options.kind || (isFailure ? "failure" : "observation"));
+  const errorSummary = rawError
+    ? sanitizeLearningText(valueToText(rawError), 160)
+    : "failed without a captured error message";
+  const summary = manualSummary || `${toolName} failed: ${errorSummary}`;
+  const defaultEvidence = isFailure ? `hook:${hookEvent}:${toolName}` : "manual:capture";
 
-  const frontMatter = extractFrontMatterBlock(fs.readFileSync(skillPath, "utf8"));
-  if (!frontMatter) {
-    return {};
-  }
-
-  return parseHookFrontMatter(frontMatter);
+  return {
+    kind,
+    summary,
+    evidence: sanitizeLearningText(options.evidence || defaultEvidence, 160),
+    scope: sanitizeLearningText(path.basename(cwd) || "global", 80),
+    source: manualSummary ? "manual" : "hook",
+  };
 }
 
-function extractFrontMatterBlock(text) {
-  const match = String(text || "").match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
-  return match ? match[1] : "";
+function sanitizeLearningKind(value) {
+  const normalized = slugify(value).slice(0, 40);
+  return normalized || "observation";
 }
 
-function parseHookFrontMatter(frontMatter) {
-  const hooks = {};
-  const lines = String(frontMatter || "").split("\n");
-  let inMetadata = false;
-  let inHooks = false;
-  let currentEvent = "";
-  let currentItem = null;
+function sanitizeLearningText(value, limit) {
+  let text = valueToText(value);
+  const homeDir = os.homedir();
+  if (homeDir && homeDir !== path.parse(homeDir).root) {
+    text = text.split(homeDir).join("~");
+  }
+  text = text
+    .replace(/-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/gi, "[REDACTED]")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9]{12,}|github_pat_[A-Za-z0-9_]{12,}|AKIA[A-Z0-9]{16})\b/g, "[REDACTED]")
+    .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[REDACTED_EMAIL]")
+    .replace(/\b(api[_-]?key|token|password|passwd|secret|cookie|authorization)\b\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .replace(/\b[A-Za-z0-9_-]{40,}\b/g, "[REDACTED]")
+    .replace(/https?:\/\/[^\s/@:]+:[^\s/@]+@/gi, "https://[REDACTED]@")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return trimTo(text, limit);
+}
 
-  for (const rawLine of lines) {
-    const line = rawLine.replace(/\s+$/, "");
-    const trimmed = line.trim();
-    const indent = line.length - line.trimStart().length;
+function valueToText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
+}
 
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
+function firstNonEmptyValue(values) {
+  return values.find((value) => value !== undefined && value !== null && valueToText(value).trim());
+}
 
-    if (indent === 0) {
-      inMetadata = trimmed === "metadata:";
-      inHooks = trimmed === "hooks:";
-      currentEvent = "";
-      currentItem = null;
-      continue;
-    }
+function createEventId(now) {
+  return `evt-${now.toISOString()}-${crypto.randomBytes(3).toString("hex")}`.replace(/[:.]/g, "-");
+}
 
-    if (inMetadata && indent === 2) {
-      inHooks = trimmed === "hooks:";
-      currentEvent = "";
-      currentItem = null;
-      continue;
-    }
+function loadCandidateStore(filePath) {
+  const data = readJsonSafe(filePath);
+  if (!data || data.schema_version !== SELF_IMPROVEMENT_SCHEMA_VERSION || !Array.isArray(data.items)) {
+    return { schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION, updated_at: null, items: [] };
+  }
+  return data;
+}
 
-    if (!inHooks) {
-      continue;
-    }
+function createCandidateFingerprint(signal) {
+  return crypto
+    .createHash("sha256")
+    .update(`${signal.kind}\n${signal.scope}\n${signal.summary.toLowerCase()}`)
+    .digest("hex");
+}
 
-    if ((inMetadata && indent === 4) || (!inMetadata && indent === 2)) {
-      const eventName = parseYamlKey(trimmed);
-      if (eventName) {
-        currentEvent = eventName;
-        hooks[currentEvent] = hooks[currentEvent] || [];
-        currentItem = null;
-      }
-      continue;
-    }
+function upsertLearningCandidate(store, signal, now) {
+  const fingerprint = createCandidateFingerprint(signal);
+  const timestamp = now.toISOString();
+  let candidate = store.items.find(
+    (item) => item.fingerprint === fingerprint && item.status !== "rejected"
+  );
+  const evidence = { source: signal.evidence, observed_at: timestamp };
 
-    if (!currentEvent) {
-      continue;
-    }
+  if (candidate) {
+    candidate.last_seen = timestamp;
+    candidate.occurrences += 1;
+    candidate.evidence = [...(candidate.evidence || []), evidence].slice(-MAX_CANDIDATE_EVIDENCE);
+  } else {
+    candidate = {
+      id: `cand-${fingerprint.slice(0, 12)}`,
+      fingerprint,
+      status: "candidate",
+      kind: signal.kind,
+      summary: signal.summary,
+      scope: signal.scope,
+      first_seen: timestamp,
+      last_seen: timestamp,
+      occurrences: 1,
+      evidence: [evidence],
+      reviews: [],
+    };
+    store.items.push(candidate);
+  }
+  store.updated_at = timestamp;
+  return candidate;
+}
 
-    const itemIndent = inMetadata ? 6 : 4;
-    const fieldIndent = itemIndent + 2;
-    if (indent === itemIndent && trimmed.startsWith("- ")) {
-      currentItem = {};
-      hooks[currentEvent].push(currentItem);
-      const inline = trimmed.slice(2).trim();
-      assignYamlField(currentItem, inline);
-      continue;
-    }
+function handleSelfImproveList(options) {
+  const env = resolveSelfImprovementEnvironment(options);
+  const store = loadCandidateStore(env.candidatesPath);
+  const status = options.status ? String(options.status).toLowerCase() : "";
+  const items = status ? store.items.filter((item) => item.status === status) : store.items;
+  if (options.format === "json") {
+    console.log(JSON.stringify(items, null, 2));
+    return Promise.resolve();
+  }
+  if (!items.length) {
+    console.log("No learning candidates found.");
+    return Promise.resolve();
+  }
+  items.forEach((item) => {
+    console.log(`${item.id}\t${item.status}\t${item.occurrences}x\t${item.summary}`);
+  });
+  return Promise.resolve();
+}
 
-    if (currentItem && indent >= fieldIndent) {
-      assignYamlField(currentItem, trimmed);
-    }
+function handleSelfImproveReview(options, args) {
+  const candidateId = args[0];
+  const decision = String(options.decision || "").toLowerCase();
+  const reason = sanitizeLearningText(options.reason, 240);
+  const validDecisions = new Set(["promote", "observe", "reject"]);
+  if (!candidateId || !validDecisions.has(decision) || !reason) {
+    console.error("Usage: agent-playbook self-improve review <candidate-id> --decision <promote|observe|reject> --reason <text> [--validated]");
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  if (decision === "promote" && options.validated !== true) {
+    console.error("Promotion requires --validated after focused testing or explicit human confirmation.");
+    process.exitCode = 1;
+    return Promise.resolve();
   }
 
-  return hooks;
-}
-
-function parseYamlKey(text) {
-  const match = String(text || "").match(/^([A-Za-z0-9_-]+):\s*$/);
-  return match ? match[1] : "";
-}
-
-function assignYamlField(target, text) {
-  const match = String(text || "").match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-  if (!match) {
-    return;
+  const env = resolveSelfImprovementEnvironment(options);
+  const store = loadCandidateStore(env.candidatesPath);
+  const candidate = store.items.find((item) => item.id === candidateId);
+  if (!candidate) {
+    console.error(`Learning candidate not found: ${candidateId}`);
+    process.exitCode = 1;
+    return Promise.resolve();
   }
-  target[match[1]] = stripYamlScalar(match[2]);
+
+  const timestamp = new Date().toISOString();
+  candidate.reviews = candidate.reviews || [];
+  candidate.reviews.push({ decision, reason, validated: options.validated === true, timestamp });
+  if (decision === "promote") {
+    candidate.status = "promoted";
+    promoteActiveRule(env.activeRulesPath, candidate, reason, timestamp);
+  } else if (decision === "reject") {
+    candidate.status = "rejected";
+  }
+  candidate.last_reviewed_at = timestamp;
+  store.updated_at = timestamp;
+  ensureDir(env.root, false);
+  writeJsonAtomic(env.candidatesPath, store);
+  console.log(`${candidate.id} reviewed: ${decision}.`);
+  return Promise.resolve();
 }
 
-function stripYamlScalar(value) {
-  const text = String(value || "").trim();
-  if (
-    (text.startsWith('"') && text.endsWith('"')) ||
-    (text.startsWith("'") && text.endsWith("'"))
-  ) {
-    return text.slice(1, -1);
+function promoteActiveRule(filePath, candidate, reason, timestamp) {
+  const data = readJsonSafe(filePath);
+  const store = data && Array.isArray(data.items)
+    ? data
+    : { schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION, updated_at: null, items: [] };
+  const existing = store.items.find((item) => item.candidate_id === candidate.id);
+  const rule = {
+    id: `rule-${candidate.fingerprint.slice(0, 12)}`,
+    candidate_id: candidate.id,
+    kind: candidate.kind,
+    rule: candidate.summary,
+    scope: candidate.scope,
+    validation: reason,
+    evidence_count: candidate.occurrences,
+    promoted_at: timestamp,
+  };
+  if (existing) {
+    Object.assign(existing, rule);
+  } else {
+    store.items.push(rule);
   }
-  return text;
+  store.updated_at = timestamp;
+  ensureDir(path.dirname(filePath), false);
+  writeJsonAtomic(filePath, store);
+}
+
+function handleSelfImproveExport(options) {
+  if (!options.output) {
+    console.error("Usage: agent-playbook self-improve export --output <markdown-file>");
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  const env = resolveSelfImprovementEnvironment(options);
+  const candidates = loadCandidateStore(env.candidatesPath).items;
+  const activeStore = readJsonSafe(env.activeRulesPath);
+  const activeRules = activeStore && Array.isArray(activeStore.items) ? activeStore.items : [];
+  const outputPath = path.resolve(options.output);
+  const lines = [
+    "# Agent Playbook Learning",
+    "",
+    `Generated: ${new Date().toISOString()}`,
+    "",
+    "## Active Rules",
+    "",
+    ...(activeRules.length
+      ? activeRules.map((item) => `- **${item.scope}**: ${item.rule} _(validated: ${item.validation})_`)
+      : ["- None"]),
+    "",
+    "## Open Candidates",
+    "",
+    ...(() => {
+      const open = candidates.filter((item) => item.status === "candidate");
+      return open.length
+        ? open.map((item) => `- \`${item.id}\` (${item.occurrences}x): ${item.summary}`)
+        : ["- None"];
+    })(),
+    "",
+  ];
+  ensureDir(path.dirname(outputPath), false);
+  writeFileAtomic(outputPath, lines.join("\n"));
+  console.log(`Learning notebook exported to ${outputPath}`);
+  return Promise.resolve();
 }
 
 function handleSkills(options, positionals, context) {
@@ -633,16 +684,20 @@ function resolveSettings(options, context) {
   const envClaudeDir = process.env.AGENT_PLAYBOOK_CLAUDE_DIR;
   const envCodexDir = process.env.AGENT_PLAYBOOK_CODEX_DIR;
   const envGeminiDir = process.env.AGENT_PLAYBOOK_GEMINI_DIR;
+  const envDshDir = process.env.AGENT_PLAYBOOK_DSH_DIR;
   const globalClaudeDir = envClaudeDir ? path.resolve(envClaudeDir) : path.join(os.homedir(), ".claude");
   const globalCodexDir = envCodexDir ? path.resolve(envCodexDir) : path.join(os.homedir(), ".codex");
   const globalGeminiDir = envGeminiDir ? path.resolve(envGeminiDir) : path.join(os.homedir(), ".gemini");
+  const globalDshDir = envDshDir ? path.resolve(envDshDir) : path.join(os.homedir(), ".dsh");
   const projectRoot = repoRootDetected || cwd;
   const projectClaudeDir = repoRootDetected ? path.join(repoRootDetected, ".claude") : null;
   const projectCodexDir = repoRootDetected ? path.join(repoRootDetected, ".codex") : null;
   const projectGeminiDir = repoRootDetected ? path.join(repoRootDetected, ".gemini") : null;
+  const projectDshDir = repoRootDetected ? path.join(repoRootDetected, ".dsh") : null;
   const claudeDir = projectMode ? path.join(projectRoot, ".claude") : globalClaudeDir;
   const codexDir = projectMode ? path.join(projectRoot, ".codex") : globalCodexDir;
   const geminiDir = projectMode ? path.join(projectRoot, ".gemini") : globalGeminiDir;
+  const dshDir = projectMode ? path.join(projectRoot, ".dsh") : globalDshDir;
 
   return {
     cwd,
@@ -654,15 +709,19 @@ function resolveSettings(options, context) {
     claudeDir,
     codexDir,
     geminiDir,
+    dshDir,
     globalClaudeDir,
     globalCodexDir,
     globalGeminiDir,
+    globalDshDir,
     projectClaudeDir,
     projectCodexDir,
     projectGeminiDir,
+    projectDshDir,
     claudeSkillsDir: path.join(claudeDir, SKILLS_DIR_NAME),
     codexSkillsDir: path.join(codexDir, SKILLS_DIR_NAME),
     geminiSkillsDir: path.join(geminiDir, SKILLS_DIR_NAME),
+    dshSkillsDir: path.join(dshDir, SKILLS_DIR_NAME),
     claudeSettingsPath: path.join(claudeDir, "settings.json"),
     codexConfigPath: path.join(codexDir, "config.toml"),
     statePath: path.join(globalClaudeDir, LOCAL_CLI_DIR, STATE_FILE_NAME),
@@ -869,12 +928,14 @@ function buildSkillEnvironment(settings) {
           claude: path.join(projectRoot, ".claude", SKILLS_DIR_NAME),
           codex: path.join(projectRoot, ".codex", SKILLS_DIR_NAME),
           gemini: path.join(projectRoot, ".gemini", SKILLS_DIR_NAME),
+          dsh: path.join(projectRoot, ".dsh", SKILLS_DIR_NAME),
         }
       : null,
     global: {
       claude: path.join(settings.globalClaudeDir, SKILLS_DIR_NAME),
       codex: path.join(settings.globalCodexDir, SKILLS_DIR_NAME),
       gemini: path.join(settings.globalGeminiDir, SKILLS_DIR_NAME),
+      dsh: path.join(settings.globalDshDir, SKILLS_DIR_NAME),
     },
   };
 
@@ -920,12 +981,22 @@ function normalizeTargetList(targetValue, defaultTarget) {
   const value = String(targetValue || defaultTarget || "both").toLowerCase();
   let targets = [];
   if (value === "both" || value === "all") {
-    targets = ["claude", "codex", "gemini"];
-  } else if (value === "claude" || value === "codex" || value === "gemini") {
-    targets = [value];
+    targets = ["claude", "codex", "gemini", "dsh"];
+  } else if (
+    value === "claude" ||
+    value === "codex" ||
+    value === "gemini" ||
+    value === "dsh" ||
+    value === "deepseek"
+  ) {
+    if (value === "deepseek") {
+      targets = ["dsh"];
+    } else {
+      targets = [value];
+    }
   } else {
     warnings.push(`Unknown target "${targetValue}", defaulting to all.`);
-    targets = ["claude", "codex", "gemini"];
+    targets = ["claude", "codex", "gemini", "dsh"];
   }
   return { targets, warnings };
 }
@@ -2121,6 +2192,7 @@ function updateClaudeSettings(settings, cliPath, options) {
   const marker = `--hook-source ${HOOK_SOURCE_VALUE}`;
   data.hooks = removeHookCommand(data.hooks, "SessionEnd", marker);
   data.hooks = removeHookCommand(data.hooks, "PostToolUse", marker);
+  data.hooks = removeHookCommand(data.hooks, "PostToolUseFailure", marker);
 
   let sessionCommand = buildHookCommand(cliPath, "session-log");
   sessionCommand = `${sessionCommand} --hook-source ${HOOK_SOURCE_VALUE}`;
@@ -2131,7 +2203,7 @@ function updateClaudeSettings(settings, cliPath, options) {
   const improveCommand = `${buildHookCommand(cliPath, "self-improve")} --hook-source ${HOOK_SOURCE_VALUE}`;
 
   ensureHook(data.hooks, "SessionEnd", null, sessionCommand);
-  ensureHook(data.hooks, "PostToolUse", "*", improveCommand);
+  ensureHook(data.hooks, "PostToolUseFailure", "*", improveCommand);
 
   data.agentPlaybook = {
     version: VERSION,
@@ -2157,6 +2229,7 @@ function removeHooks(settings) {
   const marker = `--hook-source ${HOOK_SOURCE_VALUE}`;
   data.hooks = removeHookCommand(data.hooks, "SessionEnd", marker);
   data.hooks = removeHookCommand(data.hooks, "PostToolUse", marker);
+  data.hooks = removeHookCommand(data.hooks, "PostToolUseFailure", marker);
 
   delete data.agentPlaybook;
 
@@ -2551,6 +2624,7 @@ function collectStatus(settings) {
     claudeSkillsDir: settings.claudeSkillsDir,
     codexSkillsDir: settings.codexSkillsDir,
     geminiSkillsDir: settings.geminiSkillsDir,
+    dshSkillsDir: settings.dshSkillsDir,
     claudeSettingsReadable: claudeSettings !== null || !fs.existsSync(settings.claudeSettingsPath),
     codexBlockPresent: hasCodexBlock(settings.codexConfigPath),
     hooksInstalled: hasHooks(settings.claudeSettingsPath),
@@ -2559,6 +2633,7 @@ function collectStatus(settings) {
     claudeSkillCount: countSkills(settings.claudeSkillsDir),
     codexSkillCount: countSkills(settings.codexSkillsDir),
     geminiSkillCount: countSkills(settings.geminiSkillsDir),
+    dshSkillCount: countSkills(settings.dshSkillsDir),
   };
 }
 
@@ -2570,7 +2645,7 @@ function hasHooks(settingsPath) {
   const sessionHook = (data.hooks.SessionEnd || []).some((entry) =>
     (entry.hooks || []).some((hook) => String(hook.command || "").includes("session-log"))
   );
-  const improveHook = (data.hooks.PostToolUse || []).some((entry) =>
+  const improveHook = (data.hooks.PostToolUseFailure || []).some((entry) =>
     (entry.hooks || []).some((hook) => String(hook.command || "").includes("self-improve"))
   );
   return sessionHook && improveHook;
@@ -2607,35 +2682,52 @@ function printStatus(status) {
   console.log(`- Claude skills: ${status.claudeSkillsDir}`);
   console.log(`- Codex skills: ${status.codexSkillsDir}`);
   console.log(`- Gemini skills: ${status.geminiSkillsDir}`);
+  console.log(`- DeepSeek Harness skills: ${status.dshSkillsDir}`);
   console.log(`- Claude skills count: ${status.claudeSkillCount}`);
   console.log(`- Codex skills count: ${status.codexSkillCount}`);
   console.log(`- Gemini skills count: ${status.geminiSkillCount}`);
+  console.log(`- DeepSeek Harness skills count: ${status.dshSkillCount}`);
   console.log(`- Claude hooks installed: ${status.hooksInstalled ? "yes" : "no"}`);
   console.log(`- Claude manifest present: ${status.manifestPresent ? "yes" : "no"}`);
   console.log(`- Claude local CLI present: ${status.localCliPresent ? "yes" : "no"}`);
   console.log(`- Codex config block: ${status.codexBlockPresent ? "yes" : "no"}`);
 }
 
-function printInitSummary(settings, hooksEnabled, options, claudeLinks, codexLinks, geminiLinks, warnings) {
+function printInitSummary(
+  settings,
+  hooksEnabled,
+  options,
+  claudeLinks,
+  codexLinks,
+  geminiLinks,
+  dshLinks,
+  warnings
+) {
   console.log("Init complete.");
   console.log(`- Claude skills: ${settings.claudeSkillsDir}`);
   console.log(`- Codex skills: ${settings.codexSkillsDir}`);
   console.log(`- Gemini skills: ${settings.geminiSkillsDir}`);
+  console.log(`- DeepSeek Harness skills: ${settings.dshSkillsDir}`);
   console.log(`- Hooks: ${hooksEnabled ? "enabled" : "disabled"}`);
   const linkedCount =
-    claudeLinks.created.length + codexLinks.created.length + (geminiLinks ? geminiLinks.created.length : 0);
+    claudeLinks.created.length +
+    codexLinks.created.length +
+    (geminiLinks ? geminiLinks.created.length : 0) +
+    (dshLinks ? dshLinks.created.length : 0);
   console.log(`- Linked skills: ${linkedCount}`);
   const overwrittenCount =
     (claudeLinks.overwritten ? claudeLinks.overwritten.length : 0) +
     (codexLinks.overwritten ? codexLinks.overwritten.length : 0) +
-    (geminiLinks && geminiLinks.overwritten ? geminiLinks.overwritten.length : 0);
+    (geminiLinks && geminiLinks.overwritten ? geminiLinks.overwritten.length : 0) +
+    (dshLinks && dshLinks.overwritten ? dshLinks.overwritten.length : 0);
   if (overwrittenCount) {
     console.log(`- Overwritten skills: ${overwrittenCount}`);
   }
   if (
     claudeLinks.skipped.length ||
     codexLinks.skipped.length ||
-    (geminiLinks && geminiLinks.skipped.length)
+    (geminiLinks && geminiLinks.skipped.length) ||
+    (dshLinks && dshLinks.skipped.length)
   ) {
     console.log("- Some skills were skipped due to existing paths.");
   }
@@ -2736,6 +2828,26 @@ function writeJson(filePath, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
+function writeJsonAtomic(filePath, data) {
+  writeFileAtomic(filePath, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+function writeFileAtomic(filePath, content) {
+  ensureDir(path.dirname(filePath), false);
+  const tempPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(3).toString("hex")}.tmp`
+  );
+  try {
+    fs.writeFileSync(tempPath, content, { encoding: "utf8", mode: 0o600 });
+    fs.renameSync(tempPath, filePath);
+  } finally {
+    if (fs.existsSync(tempPath)) {
+      fs.unlinkSync(tempPath);
+    }
+  }
+}
+
 function safeUnlink(targetPath) {
   if (!fs.existsSync(targetPath)) {
     return;
@@ -2803,6 +2915,7 @@ function handleRepair(options, context) {
     ensureDir(settings.claudeSkillsDir, false);
     ensureDir(settings.codexSkillsDir, false);
     ensureDir(settings.geminiSkillsDir, false);
+    ensureDir(settings.dshSkillsDir, false);
   }
 
   if (!status.localCliPresent) {
@@ -2828,6 +2941,7 @@ function handleRepair(options, context) {
     linkSkills(settings.skillsSource, settings.claudeSkillsDir, options, overwriteState);
     linkSkills(settings.skillsSource, settings.codexSkillsDir, options, overwriteState);
     linkSkills(settings.skillsSource, settings.geminiSkillsDir, options, overwriteState);
+    linkSkills(settings.skillsSource, settings.dshSkillsDir, options, overwriteState);
     if (!options["dry-run"]) {
       const manifestPath = path.join(settings.claudeSkillsDir, ".agent-playbook.json");
       if (!fs.existsSync(manifestPath)) {
@@ -2837,7 +2951,7 @@ function handleRepair(options, context) {
           installedAt: new Date().toISOString(),
           repairedAt: new Date().toISOString(),
           repoRoot: settings.repoRoot,
-          links: { claude: [], codex: [], gemini: [] },
+          links: { claude: [], codex: [], gemini: [], dsh: [] },
         });
       }
     }
@@ -2847,6 +2961,7 @@ function handleRepair(options, context) {
     settings,
     true,
     options,
+    { created: [], skipped: [] },
     { created: [], skipped: [] },
     { created: [], skipped: [] },
     { created: [], skipped: [] },
