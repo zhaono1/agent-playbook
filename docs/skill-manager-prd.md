@@ -159,19 +159,21 @@ Managing skills across project and global scopes is currently manual, error-pron
 
 ## Data Model and Storage
 **State file (local only):**
-- Default path: `~/.claude/agent-playbook/state.json`
-- Contains managed skill metadata for Claude, Codex, and Gemini.
+- Default path: `~/.agent-playbook/state.json`
+- Contains managed skill metadata for Claude, Codex, Gemini, and DeepSeek Harness.
+- Project entries include a private hash of the canonical project identity.
 
 Example:
 ```json
 {
-  "version": "1",
+  "version": "2",
   "updated_at": "2026-01-21T00:00:00Z",
   "skills": [
     {
       "name": "skill-router",
       "source": "/Users/me/agent-playbook/skills/skill-router",
       "scope": "global",
+      "project_id": "global",
       "target": "claude",
       "mode": "link",
       "disabled": false,

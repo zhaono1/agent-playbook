@@ -4,7 +4,13 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { extractFrontMatter, getSkill, getSkillHooks, listSkills } from "../index.js";
+import {
+  SERVER_VERSION,
+  extractFrontMatter,
+  getSkill,
+  getSkillHooks,
+  listSkills,
+} from "../index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -47,4 +53,11 @@ test("listSkills uses the shared catalog for category assignment", async () => {
 
   assert.equal(figma?.category, "design");
   assert.equal(planning?.category, "planning");
+  assert.equal(Object.hasOwn(figma, "path"), false);
+});
+
+test("MCP adapter version follows the playbook release line", async () => {
+  const packageJson = JSON.parse(await fs.readFile(path.join(repoRoot, "mcp-server", "package.json")));
+
+  assert.equal(SERVER_VERSION, packageJson.version);
 });

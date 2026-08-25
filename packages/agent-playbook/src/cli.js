@@ -4,6 +4,14 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
+const {
+  readJsonStrict,
+  writeFileAtomic,
+  writeJsonAtomic,
+  withFileLock,
+} = require("./persistence");
+const { removeCodexBlock, upsertCodexBlock } = require("./codex-config");
+const { collectManagedResources, removeManagedResources } = require("./ownership");
 
 const PACKAGE_NAME = "@codeharbor/agent-playbook";
 const APP_NAME = "agent-playbook";
@@ -14,7 +22,7 @@ const HOOK_SOURCE_VALUE = "agent-playbook";
 const STATE_FILE_NAME = "state.json";
 const DISABLED_DIR_NAME = ".disabled";
 const SELF_IMPROVEMENT_DIR_NAME = "self-improvement";
-const SELF_IMPROVEMENT_SCHEMA_VERSION = "1";
+const SELF_IMPROVEMENT_SCHEMA_VERSION = "2";
 const MAX_CANDIDATE_EVIDENCE = 10;
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const VALID_SKILL_SCOPES = new Set(["project", "global"]);
@@ -22,7 +30,7 @@ const VALID_SKILL_TARGETS = new Set(["claude", "codex", "gemini", "dsh"]);
 const VALID_INSTALL_MODES = new Set(["link", "copy"]);
 
 const packageJson = readJsonSafe(path.join(__dirname, "..", "package.json"));
-const VERSION = packageJson.version || "0.0.0";
+const VERSION = (packageJson && packageJson.version) || "0.0.0";
 
 function main(argv, context) {
   const parsed = parseArgs(argv);
@@ -47,7 +55,7 @@ function main(argv, context) {
     case "skills":
       return handleSkills(options, parsed.positionals, context);
     case "upgrade":
-      return handleUpgrade(options);
+      return handleUpgrade(options, context);
     case "help":
     case "--help":
     case "-h":
@@ -65,7 +73,7 @@ function printHelp() {
     `  ${APP_NAME} init [--project] [--copy] [--overwrite] [--hooks] [--no-hooks] [--session-dir <path>] [--dry-run] [--repo <path>]`,
     `  ${APP_NAME} status [--project] [--repo <path>]`,
     `  ${APP_NAME} doctor [--project] [--repo <path>]`,
-    `  ${APP_NAME} repair [--project] [--overwrite] [--repo <path>]`,
+    `  ${APP_NAME} repair [--project] [--overwrite] [--hooks] [--no-hooks] [--repo <path>]`,
     `  ${APP_NAME} uninstall [--project] [--repo <path>]`,
     `  ${APP_NAME} skills [list|info|add|remove|enable|disable|doctor|sync|upgrade|export|import]`,
     "",
@@ -73,7 +81,9 @@ function printHelp() {
     `  ${APP_NAME} session-log [--session-dir <path>]`,
     `  ${APP_NAME} self-improve [capture] [--kind <kind>] [--summary <text>] [--evidence <text>]`,
     `  ${APP_NAME} self-improve list [--status <status>] [--format json]`,
-    `  ${APP_NAME} self-improve review <candidate-id> --decision <promote|observe|reject> --reason <text> [--validated]`,
+    `  ${APP_NAME} self-improve review <candidate-id> --decision <validate|apply|observe|reject|supersede|rollback> --reason <text>`,
+    `    validate also requires --validation-method <method> --validation-evidence <reference>`,
+    `    apply also requires --owner <durable-owner> --change-ref <reference>`,
     `  ${APP_NAME} self-improve export --output <markdown-file>`,
     "",
     "Other commands:",
@@ -101,6 +111,10 @@ function parseArgs(argv) {
     "status",
     "decision",
     "reason",
+    "validation-method",
+    "validation-evidence",
+    "owner",
+    "change-ref",
   ]);
   const options = {};
   const positionals = [];
@@ -156,6 +170,12 @@ function handleInit(options, context) {
   const repoRoot = settings.repoRoot;
   const warnings = [];
   const overwriteState = createOverwriteState(options);
+  const manifestPath = path.join(settings.claudeSkillsDir, ".agent-playbook.json");
+  const previousManifest = readJsonStrict(manifestPath, null);
+  assertCodexConfigReadable(settings);
+  if (hooksEnabled) {
+    assertClaudeSettingsReadable(settings);
+  }
 
   if (!settings.skillsSource) {
     if (options.repair) {
@@ -176,6 +196,7 @@ function handleInit(options, context) {
     installedAt: new Date().toISOString(),
     repoRoot,
     copyMode: Boolean(options.copy),
+    hooksEnabled: hooksEnabled || hasHooks(settings.claudeSettingsPath),
     links: {
       claude: [],
       codex: [],
@@ -193,13 +214,30 @@ function handleInit(options, context) {
     codexLinks = linkSkills(settings.skillsSource, settings.codexSkillsDir, options, overwriteState);
     geminiLinks = linkSkills(settings.skillsSource, settings.geminiSkillsDir, options, overwriteState);
     dshLinks = linkSkills(settings.skillsSource, settings.dshSkillsDir, options, overwriteState);
-    manifest.links.claude = claudeLinks.created;
-    manifest.links.codex = codexLinks.created;
-    manifest.links.gemini = geminiLinks.created;
-    manifest.links.dsh = dshLinks.created;
+    const previousLinks = previousManifest && previousManifest.links ? previousManifest.links : {};
+    manifest.links.claude = collectManagedResources(
+      previousLinks.claude,
+      claudeLinks,
+      settings.claudeSkillsDir
+    );
+    manifest.links.codex = collectManagedResources(
+      previousLinks.codex,
+      codexLinks,
+      settings.codexSkillsDir
+    );
+    manifest.links.gemini = collectManagedResources(
+      previousLinks.gemini,
+      geminiLinks,
+      settings.geminiSkillsDir
+    );
+    manifest.links.dsh = collectManagedResources(
+      previousLinks.dsh,
+      dshLinks,
+      settings.dshSkillsDir
+    );
 
     if (!options["dry-run"]) {
-      writeJson(path.join(settings.claudeSkillsDir, ".agent-playbook.json"), manifest);
+      writeJsonAtomic(manifestPath, manifest);
     }
   }
 
@@ -253,13 +291,22 @@ function handleDoctor(options, context) {
 function handleUninstall(options, context) {
   const settings = resolveSettings(options, context || {});
   const manifestPath = path.join(settings.claudeSkillsDir, ".agent-playbook.json");
-  const manifest = readJsonSafe(manifestPath);
+  const manifest = readJsonStrict(manifestPath, null);
+  assertCodexConfigReadable(settings);
+  if (!manifest || manifest.hooksEnabled !== false) {
+    assertClaudeSettingsReadable(settings);
+  }
 
   if (manifest && manifest.links) {
-    removeLinks(manifest.links.claude || []);
-    removeLinks(manifest.links.codex || []);
-    removeLinks(manifest.links.gemini || []);
-    removeLinks(manifest.links.dsh || []);
+    const results = [
+      removeManagedResources(manifest.links.claude || [], settings.claudeSkillsDir),
+      removeManagedResources(manifest.links.codex || [], settings.codexSkillsDir),
+      removeManagedResources(manifest.links.gemini || [], settings.geminiSkillsDir),
+      removeManagedResources(manifest.links.dsh || [], settings.dshSkillsDir),
+    ];
+    results.flatMap((result) => result.preserved).forEach((target) => {
+      console.error(`Warning: ownership changed for ${target}; preserving it.`);
+    });
     safeUnlink(manifestPath);
   } else {
     console.log("No manifest found. Skipping link removal.");
@@ -277,19 +324,25 @@ async function handleSessionLog(options) {
   const transcriptPath = options["transcript-path"] || input.transcript_path;
   const cwd = options.cwd || input.cwd || process.cwd();
   const sessionId = input.session_id || "unknown";
-  const sessionDir = resolveSessionDir(options["session-dir"], cwd);
+  const projectRoot = findRepoRoot(cwd) || cwd;
+  const projectId = createProjectId(projectRoot);
+  const configuredRoot = options["data-dir"] || process.env.AGENT_PLAYBOOK_DATA_DIR;
+  const dataRoot = configuredRoot
+    ? path.resolve(configuredRoot)
+    : path.join(os.homedir(), ".agent-playbook");
+  const sessionDir = resolveSessionDir(options["session-dir"], dataRoot, projectId);
 
   ensureDir(sessionDir, false);
 
   const events = transcriptPath ? readTranscript(transcriptPath) : [];
-  const insights = collectTranscriptInsights(events);
+  const insights = collectTranscriptInsights(events, projectRoot);
   const lastUserPrompt = insights.lastUserPrompt;
   const topic = buildTopic(lastUserPrompt, cwd);
   const fileName = `${formatDate(new Date())}-${topic}.md`;
   const outputPath = resolveUniquePath(path.join(sessionDir, fileName));
-  const summary = buildSessionSummary(insights, sessionId, cwd);
+  const summary = buildSessionSummary(insights, sessionId, projectId);
 
-  fs.writeFileSync(outputPath, summary, "utf8");
+  writeFileAtomic(outputPath, summary, { mode: 0o600 });
   console.error(`Session log saved to ${outputPath}`);
 }
 
@@ -319,57 +372,83 @@ async function handleSelfImprove(options, positionals) {
 
   const env = resolveSelfImprovementEnvironment(options);
   const now = new Date();
-  const candidateStore = loadCandidateStore(env.candidatesPath);
-  const candidate = upsertLearningCandidate(candidateStore, signal, now);
-  const event = {
-    schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION,
-    id: createEventId(now),
-    timestamp: now.toISOString(),
-    candidate_id: candidate.id,
-    kind: signal.kind,
-    summary: signal.summary,
-    evidence: signal.evidence,
-    scope: signal.scope,
-    source: signal.source,
-    agent_playbook_version: VERSION,
-  };
+  const candidate = withFileLock(env.lockPath, () => {
+    const candidateStore = loadCandidateStore(env.candidatesPath);
+    const captured = upsertLearningCandidate(candidateStore, signal, now);
+    const event = {
+      schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION,
+      id: createEventId(now),
+      timestamp: now.toISOString(),
+      candidate_id: captured.id,
+      kind: captured.kind,
+      summary: captured.summary,
+      evidence: signal.evidence,
+      scope: captured.scope,
+      source: signal.source,
+      agent_playbook_version: VERSION,
+    };
 
-  ensureDir(path.dirname(env.candidatesPath), false);
-  ensureDir(path.join(env.eventsDir, now.toISOString().slice(0, 7)), false);
-  writeJsonAtomic(env.candidatesPath, candidateStore);
-  writeJsonAtomic(
-    path.join(env.eventsDir, now.toISOString().slice(0, 7), `${event.id}.json`),
-    event
-  );
+    ensureDir(path.join(env.eventsDir, now.toISOString().slice(0, 7)), false);
+    writeJsonAtomic(
+      path.join(env.eventsDir, now.toISOString().slice(0, 7), `${event.id}.json`),
+      event
+    );
+    writeJsonAtomic(env.candidatesPath, candidateStore);
+    writeActiveRuleProjection(env.activeRulesPath, candidateStore);
+    return captured;
+  });
   console.error(`Learning candidate ${candidate.id} captured (${candidate.occurrences} occurrence(s)).`);
 }
 
-async function handleUpgrade(options) {
-  const { execSync } = require("child_process");
+async function handleUpgrade(options, context) {
+  const { execFileSync } = require("child_process");
   console.log(`Current version: ${VERSION}`);
   console.log(`Checking for updates...`);
 
   try {
-    const latestVersion = execSync(`npm view ${PACKAGE_NAME} version`, {
+    const latestVersion = execFileSync("npm", ["view", PACKAGE_NAME, "version"], {
       encoding: "utf8",
     }).trim();
 
     if (latestVersion === VERSION) {
-      console.log(`Already at the latest version (${VERSION}).`);
+      console.log(`Already at the latest version (${VERSION}); refreshing the hook runtime.`);
+      await handleRepair({ ...options, repair: true }, context || {});
       return;
     }
 
     console.log(`New version available: ${latestVersion}`);
     console.log(`Upgrading ${PACKAGE_NAME}...`);
 
-    execSync(`npm install -g ${PACKAGE_NAME}@latest`, {
+    execFileSync("npm", ["install", "-g", `${PACKAGE_NAME}@latest`], {
       stdio: "inherit",
     });
 
-    console.log(`Successfully upgraded to ${latestVersion}.`);
+    const npmRoot = execFileSync("npm", ["root", "-g"], { encoding: "utf8" }).trim();
+    const upgradedBin = path.join(npmRoot, "@codeharbor", "agent-playbook", "bin", "agent-playbook.js");
+    if (!fs.existsSync(upgradedBin)) {
+      throw new Error(`Upgraded CLI not found at ${upgradedBin}`);
+    }
+    const repairArgs = [upgradedBin, "repair"];
+    if (options.repo) {
+      repairArgs.push("--repo", path.resolve(options.repo));
+    }
+    if (options.project) {
+      repairArgs.push("--project");
+    }
+    if (options["session-dir"]) {
+      repairArgs.push("--session-dir", path.resolve(options["session-dir"]));
+    }
+    if (options.hooks === false) {
+      repairArgs.push("--no-hooks");
+    } else if (options.hooks === true) {
+      repairArgs.push("--hooks");
+    }
+    execFileSync(process.execPath, repairArgs, { stdio: "inherit", env: process.env });
+
+    console.log(`Successfully upgraded to ${latestVersion} and refreshed the hook runtime.`);
   } catch (error) {
     console.error(`Upgrade failed: ${error.message}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 
@@ -384,6 +463,7 @@ function resolveSelfImprovementEnvironment(options) {
     candidatesPath: path.join(root, "candidates.json"),
     activeRulesPath: path.join(root, "active-rules.json"),
     eventsDir: path.join(root, "events"),
+    lockPath: path.join(root, ".state.lock"),
   };
 }
 
@@ -410,12 +490,13 @@ function buildLearningSignal(input, options) {
     : "failed without a captured error message";
   const summary = manualSummary || `${toolName} failed: ${errorSummary}`;
   const defaultEvidence = isFailure ? `hook:${hookEvent}:${toolName}` : "manual:capture";
+  const projectRoot = findRepoRoot(cwd) || cwd;
 
   return {
     kind,
     summary,
     evidence: sanitizeLearningText(options.evidence || defaultEvidence, 160),
-    scope: sanitizeLearningText(path.basename(cwd) || "global", 80),
+    scope: createProjectId(projectRoot),
     source: manualSummary ? "manual" : "hook",
   };
 }
@@ -426,7 +507,19 @@ function sanitizeLearningKind(value) {
 }
 
 function sanitizeLearningText(value, limit) {
+  const text = redactSensitiveText(value)
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return trimTo(text, limit);
+}
+
+function redactSensitiveText(value, projectRoot) {
   let text = valueToText(value);
+  if (projectRoot) {
+    const normalizedProjectRoot = path.resolve(projectRoot);
+    text = text.split(normalizedProjectRoot).join("[PROJECT_ROOT]");
+  }
   const homeDir = os.homedir();
   if (homeDir && homeDir !== path.parse(homeDir).root) {
     text = text.split(homeDir).join("~");
@@ -438,11 +531,8 @@ function sanitizeLearningText(value, limit) {
     .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[REDACTED_EMAIL]")
     .replace(/\b(api[_-]?key|token|password|passwd|secret|cookie|authorization)\b\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
     .replace(/\b[A-Za-z0-9_-]{40,}\b/g, "[REDACTED]")
-    .replace(/https?:\/\/[^\s/@:]+:[^\s/@]+@/gi, "https://[REDACTED]@")
-    .replace(/[\r\n\t]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return trimTo(text, limit);
+    .replace(/https?:\/\/[^\s/@:]+:[^\s/@]+@/gi, "https://[REDACTED]@");
+  return text;
 }
 
 function valueToText(value) {
@@ -468,9 +558,56 @@ function createEventId(now) {
 }
 
 function loadCandidateStore(filePath) {
-  const data = readJsonSafe(filePath);
-  if (!data || data.schema_version !== SELF_IMPROVEMENT_SCHEMA_VERSION || !Array.isArray(data.items)) {
+  const data = readJsonStrict(filePath, null);
+  if (!data) {
     return { schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION, updated_at: null, items: [] };
+  }
+  if (!Array.isArray(data.items)) {
+    const error = new Error(`Invalid candidate store schema in ${filePath}; refusing to overwrite it.`);
+    error.code = "APB_INVALID_CANDIDATE_SCHEMA";
+    throw error;
+  }
+  if (String(data.schema_version || "1") === "1") {
+    const seenIds = new Set();
+    return {
+      ...data,
+      schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION,
+      items: data.items.map((item, index) => {
+        const next = { ...item };
+        if (seenIds.has(next.id)) {
+          next.legacy_id = next.id;
+          next.id = `${next.id}-legacy-${index + 1}`;
+        }
+        seenIds.add(next.id);
+        if (next.status === "promoted") {
+          next.status = "validated";
+          next.legacy_status = "promoted";
+        }
+        next.reviews = Array.isArray(next.reviews)
+          ? next.reviews.map((review) => ({
+              ...review,
+              decision: review.decision === "promote" ? "validate" : review.decision,
+            }))
+          : [];
+        return next;
+      }),
+    };
+  }
+  if (String(data.schema_version) !== SELF_IMPROVEMENT_SCHEMA_VERSION) {
+    const error = new Error(
+      `Unsupported candidate store schema ${data.schema_version} in ${filePath}; refusing to overwrite it.`
+    );
+    error.code = "APB_UNSUPPORTED_CANDIDATE_SCHEMA";
+    throw error;
+  }
+  const ids = new Set();
+  for (const item of data.items) {
+    if (!item || !item.id || ids.has(item.id)) {
+      const error = new Error(`Candidate store ${filePath} contains an invalid or duplicate id.`);
+      error.code = "APB_INVALID_CANDIDATE_ID";
+      throw error;
+    }
+    ids.add(item.id);
   }
   return data;
 }
@@ -486,7 +623,9 @@ function upsertLearningCandidate(store, signal, now) {
   const fingerprint = createCandidateFingerprint(signal);
   const timestamp = now.toISOString();
   let candidate = store.items.find(
-    (item) => item.fingerprint === fingerprint && item.status !== "rejected"
+    (item) =>
+      item.fingerprint === fingerprint &&
+      (item.status === "candidate" || item.status === "validated")
   );
   const evidence = { source: signal.evidence, observed_at: timestamp };
 
@@ -495,11 +634,14 @@ function upsertLearningCandidate(store, signal, now) {
     candidate.occurrences += 1;
     candidate.evidence = [...(candidate.evidence || []), evidence].slice(-MAX_CANDIDATE_EVIDENCE);
   } else {
+    const applied = [...store.items]
+      .reverse()
+      .find((item) => item.fingerprint === fingerprint && item.status === "applied");
     candidate = {
-      id: `cand-${fingerprint.slice(0, 12)}`,
+      id: `cand-${fingerprint.slice(0, 12)}-${crypto.randomBytes(3).toString("hex")}`,
       fingerprint,
       status: "candidate",
-      kind: signal.kind,
+      kind: applied ? "regression" : signal.kind,
       summary: signal.summary,
       scope: signal.scope,
       first_seen: timestamp,
@@ -508,6 +650,9 @@ function upsertLearningCandidate(store, signal, now) {
       evidence: [evidence],
       reviews: [],
     };
+    if (applied) {
+      candidate.regression_of = applied.id;
+    }
     store.items.push(candidate);
   }
   store.updated_at = timestamp;
@@ -535,70 +680,127 @@ function handleSelfImproveList(options) {
 
 function handleSelfImproveReview(options, args) {
   const candidateId = args[0];
-  const decision = String(options.decision || "").toLowerCase();
+  const requestedDecision = String(options.decision || "").toLowerCase();
+  const decision = requestedDecision === "promote" ? "validate" : requestedDecision;
   const reason = sanitizeLearningText(options.reason, 240);
-  const validDecisions = new Set(["promote", "observe", "reject"]);
+  const validDecisions = new Set(["validate", "apply", "observe", "reject", "supersede", "rollback"]);
   if (!candidateId || !validDecisions.has(decision) || !reason) {
-    console.error("Usage: agent-playbook self-improve review <candidate-id> --decision <promote|observe|reject> --reason <text> [--validated]");
+    console.error(
+      "Usage: agent-playbook self-improve review <candidate-id> --decision <validate|apply|observe|reject|supersede|rollback> --reason <text>"
+    );
     process.exitCode = 1;
     return Promise.resolve();
   }
-  if (decision === "promote" && options.validated !== true) {
-    console.error("Promotion requires --validated after focused testing or explicit human confirmation.");
+  const validationMethod = sanitizeLearningText(options["validation-method"], 80);
+  const validationEvidence = sanitizeLearningText(options["validation-evidence"], 240);
+  if (decision === "validate" && (!validationMethod || !validationEvidence)) {
+    console.error("Validation requires --validation-method <method> and --validation-evidence <reference>.");
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  const owner = sanitizeLearningText(options.owner, 160);
+  const changeRef = sanitizeLearningText(options["change-ref"], 200);
+  if (decision === "apply" && (!owner || !changeRef)) {
+    console.error("Application requires --owner <durable-owner> and --change-ref <reference>.");
     process.exitCode = 1;
     return Promise.resolve();
   }
 
   const env = resolveSelfImprovementEnvironment(options);
-  const store = loadCandidateStore(env.candidatesPath);
-  const candidate = store.items.find((item) => item.id === candidateId);
-  if (!candidate) {
-    console.error(`Learning candidate not found: ${candidateId}`);
+  const result = withFileLock(env.lockPath, () => {
+    const store = loadCandidateStore(env.candidatesPath);
+    const candidate = store.items.find((item) => item.id === candidateId);
+    if (!candidate) {
+      return { error: `Learning candidate not found: ${candidateId}` };
+    }
+
+    const allowedTransitions = {
+      candidate: new Set(["observe", "reject", "validate"]),
+      validated: new Set(["observe", "apply", "supersede"]),
+      applied: new Set(["rollback", "supersede"]),
+      rejected: new Set(),
+      superseded: new Set(),
+      rolled_back: new Set(),
+    };
+    const allowed = allowedTransitions[candidate.status] || new Set();
+    if (!allowed.has(decision)) {
+      return { error: `Invalid transition: ${candidate.status} -> ${decision}.` };
+    }
+
+    const timestamp = new Date().toISOString();
+    const review = { decision, reason, timestamp };
+    if (decision === "validate") {
+      candidate.status = "validated";
+      candidate.validation = {
+        method: validationMethod,
+        evidence: validationEvidence,
+        validated_at: timestamp,
+      };
+      review.validation = candidate.validation;
+    } else if (decision === "apply") {
+      candidate.status = "applied";
+      candidate.application = {
+        owner,
+        change_ref: changeRef,
+        applied_at: timestamp,
+      };
+      review.application = candidate.application;
+    } else if (decision === "reject") {
+      candidate.status = "rejected";
+    } else if (decision === "supersede") {
+      candidate.status = "superseded";
+    } else if (decision === "rollback") {
+      candidate.status = "rolled_back";
+    }
+    candidate.reviews = candidate.reviews || [];
+    candidate.reviews.push(review);
+    candidate.last_reviewed_at = timestamp;
+    store.updated_at = timestamp;
+    writeJsonAtomic(env.candidatesPath, store);
+    writeActiveRuleProjection(env.activeRulesPath, store);
+    return { candidate };
+  });
+  if (result.error) {
+    console.error(result.error);
     process.exitCode = 1;
     return Promise.resolve();
   }
-
-  const timestamp = new Date().toISOString();
-  candidate.reviews = candidate.reviews || [];
-  candidate.reviews.push({ decision, reason, validated: options.validated === true, timestamp });
-  if (decision === "promote") {
-    candidate.status = "promoted";
-    promoteActiveRule(env.activeRulesPath, candidate, reason, timestamp);
-  } else if (decision === "reject") {
-    candidate.status = "rejected";
+  if (requestedDecision === "promote") {
+    console.error('Warning: decision "promote" is deprecated; recorded as "validate".');
   }
-  candidate.last_reviewed_at = timestamp;
-  store.updated_at = timestamp;
-  ensureDir(env.root, false);
-  writeJsonAtomic(env.candidatesPath, store);
-  console.log(`${candidate.id} reviewed: ${decision}.`);
+  console.log(`${result.candidate.id} reviewed: ${decision}.`);
   return Promise.resolve();
 }
 
-function promoteActiveRule(filePath, candidate, reason, timestamp) {
-  const data = readJsonSafe(filePath);
-  const store = data && Array.isArray(data.items)
-    ? data
-    : { schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION, updated_at: null, items: [] };
-  const existing = store.items.find((item) => item.candidate_id === candidate.id);
-  const rule = {
-    id: `rule-${candidate.fingerprint.slice(0, 12)}`,
-    candidate_id: candidate.id,
-    kind: candidate.kind,
-    rule: candidate.summary,
-    scope: candidate.scope,
-    validation: reason,
-    evidence_count: candidate.occurrences,
-    promoted_at: timestamp,
+function buildActiveRuleProjection(candidateStore) {
+  return {
+    schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION,
+    generated_from: "candidates.json",
+    updated_at: candidateStore.updated_at,
+    items: candidateStore.items
+      .filter((candidate) => candidate.status === "applied")
+      .map((candidate) => ({
+        id: `rule-${candidate.id.slice(5)}`,
+        candidate_id: candidate.id,
+        status: "applied",
+        kind: candidate.kind,
+        rule: candidate.summary,
+        scope: candidate.scope,
+        validation: candidate.validation,
+        owner: candidate.application && candidate.application.owner,
+        change_ref: candidate.application && candidate.application.change_ref,
+        evidence_count: candidate.occurrences,
+        applied_at: candidate.application && candidate.application.applied_at,
+      })),
   };
-  if (existing) {
-    Object.assign(existing, rule);
-  } else {
-    store.items.push(rule);
+}
+
+function writeActiveRuleProjection(filePath, candidateStore) {
+  const projection = buildActiveRuleProjection(candidateStore);
+  if (!projection.items.length && !fs.existsSync(filePath)) {
+    return;
   }
-  store.updated_at = timestamp;
-  ensureDir(path.dirname(filePath), false);
-  writeJsonAtomic(filePath, store);
+  writeJsonAtomic(filePath, projection);
 }
 
 function handleSelfImproveExport(options) {
@@ -608,25 +810,30 @@ function handleSelfImproveExport(options) {
     return Promise.resolve();
   }
   const env = resolveSelfImprovementEnvironment(options);
-  const candidates = loadCandidateStore(env.candidatesPath).items;
-  const activeStore = readJsonSafe(env.activeRulesPath);
-  const activeRules = activeStore && Array.isArray(activeStore.items) ? activeStore.items : [];
+  const candidateStore = loadCandidateStore(env.candidatesPath);
+  const candidates = candidateStore.items;
+  const activeRules = buildActiveRuleProjection(candidateStore).items;
   const outputPath = path.resolve(options.output);
   const lines = [
     "# Agent Playbook Learning",
     "",
     `Generated: ${new Date().toISOString()}`,
     "",
-    "## Active Rules",
+    "## Applied Rules",
     "",
     ...(activeRules.length
-      ? activeRules.map((item) => `- **${item.scope}**: ${item.rule} _(validated: ${item.validation})_`)
+      ? activeRules.map(
+          (item) =>
+            `- **${item.scope}**: ${item.rule} _(owner: ${item.owner}; change: ${item.change_ref})_`
+        )
       : ["- None"]),
     "",
     "## Open Candidates",
     "",
     ...(() => {
-      const open = candidates.filter((item) => item.status === "candidate");
+      const open = candidates.filter(
+        (item) => item.status === "candidate" || item.status === "validated"
+      );
       return open.length
         ? open.map((item) => `- \`${item.id}\` (${item.occurrences}x): ${item.summary}`)
         : ["- None"];
@@ -641,36 +848,48 @@ function handleSelfImproveExport(options) {
 
 function handleSkills(options, positionals, context) {
   const settings = resolveSettings(options, context || {});
+  migrateLegacyStateWithLock(settings.statePath, settings.legacyStatePath);
   const subcommand = positionals[0] || "list";
   const args = positionals.slice(1);
+  const dispatch = () => {
+    switch (subcommand) {
+      case "list":
+        return handleSkillsList(options, args, settings);
+      case "info":
+        return handleSkillsInfo(options, args, settings);
+      case "add":
+        return handleSkillsAdd(options, args, settings);
+      case "remove":
+        return handleSkillsRemove(options, args, settings);
+      case "enable":
+        return handleSkillsEnable(options, args, settings);
+      case "disable":
+        return handleSkillsDisable(options, args, settings);
+      case "doctor":
+        return handleSkillsDoctor(options, args, settings);
+      case "sync":
+        return handleSkillsSync(options, args, settings);
+      case "upgrade":
+        return handleSkillsUpgrade(options, args, settings);
+      case "export":
+        return handleSkillsExport(options, args, settings);
+      case "import":
+        return handleSkillsImport(options, args, settings);
+      default:
+        console.error(`Unknown skills subcommand: ${subcommand}`);
+        process.exitCode = 1;
+        return Promise.resolve();
+    }
+  };
 
-  switch (subcommand) {
-    case "list":
-      return handleSkillsList(options, args, settings);
-    case "info":
-      return handleSkillsInfo(options, args, settings);
-    case "add":
-      return handleSkillsAdd(options, args, settings);
-    case "remove":
-      return handleSkillsRemove(options, args, settings);
-    case "enable":
-      return handleSkillsEnable(options, args, settings);
-    case "disable":
-      return handleSkillsDisable(options, args, settings);
-    case "doctor":
-      return handleSkillsDoctor(options, args, settings);
-    case "sync":
-      return handleSkillsSync(options, args, settings);
-    case "upgrade":
-      return handleSkillsUpgrade(options, args, settings);
-    case "export":
-      return handleSkillsExport(options, args, settings);
-    case "import":
-      return handleSkillsImport(options, args, settings);
-    default:
-      console.error(`Unknown skills subcommand: ${subcommand}`);
-      return Promise.resolve();
+  const mutating =
+    new Set(["add", "remove", "enable", "disable", "sync", "upgrade", "import"]).has(
+      subcommand
+    ) || (subcommand === "doctor" && options.fix);
+  if (mutating) {
+    return withFileLock(`${settings.statePath}.lock`, dispatch);
   }
+  return dispatch();
 }
 
 function resolveSettings(options, context) {
@@ -680,6 +899,10 @@ function resolveSettings(options, context) {
     context && context.cliPath ? path.resolve(path.dirname(context.cliPath), "..") : null;
   const skillsSource = resolveSkillsSource([repoRootDetected || cwd, cliRoot]);
   const projectMode = Boolean(options.project);
+  const configuredDataRoot = options["data-dir"] || process.env.AGENT_PLAYBOOK_DATA_DIR;
+  const dataRoot = configuredDataRoot
+    ? path.resolve(configuredDataRoot)
+    : path.join(os.homedir(), ".agent-playbook");
 
   const envClaudeDir = process.env.AGENT_PLAYBOOK_CLAUDE_DIR;
   const envCodexDir = process.env.AGENT_PLAYBOOK_CODEX_DIR;
@@ -703,6 +926,8 @@ function resolveSettings(options, context) {
     cwd,
     repoRoot: repoRootDetected || cwd,
     repoRootDetected,
+    projectId: createProjectId(projectRoot),
+    dataRoot,
     skillsSource,
     projectMode,
     cliPath: context && context.cliPath ? context.cliPath : null,
@@ -724,8 +949,23 @@ function resolveSettings(options, context) {
     dshSkillsDir: path.join(dshDir, SKILLS_DIR_NAME),
     claudeSettingsPath: path.join(claudeDir, "settings.json"),
     codexConfigPath: path.join(codexDir, "config.toml"),
-    statePath: path.join(globalClaudeDir, LOCAL_CLI_DIR, STATE_FILE_NAME),
+    statePath: path.join(dataRoot, STATE_FILE_NAME),
+    legacyStatePath: path.join(globalClaudeDir, LOCAL_CLI_DIR, STATE_FILE_NAME),
   };
+}
+
+function hashIdentity(value) {
+  return crypto.createHash("sha256").update(String(value || "unknown")).digest("hex").slice(0, 12);
+}
+
+function createProjectId(projectRoot) {
+  let canonical = path.resolve(projectRoot || process.cwd());
+  try {
+    canonical = fs.realpathSync(canonical);
+  } catch (error) {
+    // The caller may be preparing a new project path. The normalized absolute path is stable enough.
+  }
+  return `project-${hashIdentity(canonical)}`;
 }
 
 function findRepoRoot(startDir) {
@@ -941,10 +1181,41 @@ function buildSkillEnvironment(settings) {
 
   return {
     projectRoot,
+    projectId: settings.projectId,
     scopeDirs,
     statePath: settings.statePath,
+    stateLockPath: `${settings.statePath}.lock`,
+    legacyStatePath: settings.legacyStatePath,
     skillsSource: settings.skillsSource,
   };
+}
+
+function migrateLegacyStateWithLock(statePath, legacyStatePath) {
+  if (fs.existsSync(statePath) || !legacyStatePath || !fs.existsSync(legacyStatePath)) {
+    return;
+  }
+  withFileLock(`${statePath}.lock`, () => migrateLegacyState(statePath, legacyStatePath));
+}
+
+function migrateLegacyState(statePath, legacyStatePath) {
+  if (
+    !legacyStatePath ||
+    path.resolve(statePath) === path.resolve(legacyStatePath) ||
+    fs.existsSync(statePath) ||
+    !fs.existsSync(legacyStatePath)
+  ) {
+    return;
+  }
+  const legacy = readJsonStrict(legacyStatePath, null);
+  if (!legacy || !Array.isArray(legacy.skills)) {
+    const error = new Error(`Invalid legacy state schema in ${legacyStatePath}; migration stopped.`);
+    error.code = "APB_INVALID_LEGACY_STATE";
+    throw error;
+  }
+  const migrated = createEmptyState();
+  migrated.migrated_from = "claude-agent-playbook-state-v1";
+  migrated.skills = legacy.skills.map(normalizeStateEntry).filter(Boolean);
+  writeJsonAtomic(statePath, migrated);
 }
 
 function normalizeScopeList(scopeValue, projectRoot, defaultScope) {
@@ -958,13 +1229,19 @@ function normalizeScopeList(scopeValue, projectRoot, defaultScope) {
   } else if (value === "global") {
     scopes = ["global"];
   } else {
-    warnings.push(`Unknown scope "${scopeValue}", defaulting to both.`);
-    scopes = ["project", "global"];
+    const error = new Error(`Unknown scope "${scopeValue}". Expected project, global, or all.`);
+    error.code = "APB_INVALID_SCOPE";
+    throw error;
   }
 
   if (!projectRoot) {
     if (scopes.includes("project")) {
-      warnings.push("Project scope requested but no repo root detected; skipping project scope.");
+      if (scopeValue && value !== "both" && value !== "all") {
+        const error = new Error("Project scope requested but no repository root was detected.");
+        error.code = "APB_PROJECT_SCOPE_UNAVAILABLE";
+        throw error;
+      }
+      warnings.push("Project scope unavailable; showing global scope only.");
     }
     scopes = scopes.filter((scope) => scope !== "project");
   }
@@ -995,8 +1272,11 @@ function normalizeTargetList(targetValue, defaultTarget) {
       targets = [value];
     }
   } else {
-    warnings.push(`Unknown target "${targetValue}", defaulting to all.`);
-    targets = ["claude", "codex", "gemini", "dsh"];
+    const error = new Error(
+      `Unknown target "${targetValue}". Expected claude, codex, gemini, deepseek, or all.`
+    );
+    error.code = "APB_INVALID_TARGET";
+    throw error;
   }
   return { targets, warnings };
 }
@@ -1027,7 +1307,7 @@ function resolveInstallMode(options, fallbackMode) {
 
 function createEmptyState() {
   return {
-    version: "1",
+    version: "2",
     updated_at: new Date().toISOString(),
     skills: [],
   };
@@ -1044,6 +1324,8 @@ function normalizeStateEntry(entry) {
   }
 
   const normalized = { ...entry };
+  normalized.project_id =
+    normalized.scope === "project" ? normalized.project_id || "legacy-unknown" : "global";
   if (normalized.mode && !VALID_INSTALL_MODES.has(normalized.mode)) {
     delete normalized.mode;
   }
@@ -1051,28 +1333,19 @@ function normalizeStateEntry(entry) {
 }
 
 function loadStateFile(statePath) {
-  if (!fs.existsSync(statePath)) {
+  const parsed = readJsonStrict(statePath, null);
+  if (!parsed) {
     return createEmptyState();
   }
-  try {
-    const parsed = JSON.parse(fs.readFileSync(statePath, "utf8"));
-    if (!parsed || typeof parsed !== "object") {
-      throw new Error("Invalid state file");
-    }
-    parsed.skills = Array.isArray(parsed.skills)
-      ? parsed.skills.map(normalizeStateEntry).filter(Boolean)
-      : [];
-    if (!parsed.version) {
-      parsed.version = "1";
-    }
-    if (!parsed.updated_at) {
-      parsed.updated_at = new Date().toISOString();
-    }
-    return parsed;
-  } catch (error) {
-    console.error("Warning: unable to parse state.json, recreating state file.");
-    return createEmptyState();
+  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.skills)) {
+    const error = new Error(`Invalid state schema in ${statePath}; refusing to overwrite it.`);
+    error.code = "APB_INVALID_STATE_SCHEMA";
+    throw error;
   }
+  parsed.skills = parsed.skills.map(normalizeStateEntry).filter(Boolean);
+  parsed.version = "2";
+  parsed.updated_at = parsed.updated_at || new Date().toISOString();
+  return parsed;
 }
 
 function saveStateFile(statePath, state, dryRun) {
@@ -1080,11 +1353,12 @@ function saveStateFile(statePath, state, dryRun) {
     return;
   }
   ensureDir(path.dirname(statePath), false);
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  writeJsonAtomic(statePath, state);
 }
 
-function stateKey(name, scope, target) {
-  return `${target}:${scope}:${name}`;
+function stateKey(name, scope, target, projectId) {
+  const ownerId = scope === "project" ? projectId || "legacy-unknown" : "global";
+  return `${ownerId}:${target}:${scope}:${name}`;
 }
 
 function indexStateEntries(state) {
@@ -1093,9 +1367,13 @@ function indexStateEntries(state) {
     if (!normalizeStateEntry(entry)) {
       return;
     }
-    map.set(stateKey(entry.name, entry.scope, entry.target), entry);
+    map.set(stateKey(entry.name, entry.scope, entry.target, entry.project_id), entry);
   });
   return map;
+}
+
+function isStateEntryInEnvironment(entry, env) {
+  return entry.scope === "global" || entry.project_id === env.projectId;
 }
 
 function listBuiltInSkills(skillsSource) {
@@ -1152,7 +1430,7 @@ function resolveSkillInput(input, env) {
   return { name: input, sourceDir: candidate, kind: "name" };
 }
 
-function scanSkills(scopeDirs, scopes, targets, stateIndex) {
+function scanSkills(scopeDirs, scopes, targets, stateIndex, projectId) {
   const records = [];
   const warnings = [];
 
@@ -1168,7 +1446,7 @@ function scanSkills(scopeDirs, scopes, targets, stateIndex) {
         warnings.push(`Target "${target}" not available for scope "${scope}".`);
         return;
       }
-      records.push(...scanSkillDir(dirPath, scope, target, stateIndex));
+      records.push(...scanSkillDir(dirPath, scope, target, stateIndex, projectId));
     });
   });
 
@@ -1176,7 +1454,7 @@ function scanSkills(scopeDirs, scopes, targets, stateIndex) {
   return { records, warnings };
 }
 
-function scanSkillDir(dirPath, scope, target, stateIndex) {
+function scanSkillDir(dirPath, scope, target, stateIndex, projectId) {
   if (!dirPath || !fs.existsSync(dirPath)) {
     return [];
   }
@@ -1192,7 +1470,17 @@ function scanSkillDir(dirPath, scope, target, stateIndex) {
     if (!entry.isDirectory() && !entry.isSymbolicLink()) {
       return;
     }
-    records.push(buildSkillRecord(entry.name, path.join(dirPath, entry.name), scope, target, false, stateIndex));
+    records.push(
+      buildSkillRecord(
+        entry.name,
+        path.join(dirPath, entry.name),
+        scope,
+        target,
+        false,
+        stateIndex,
+        projectId
+      )
+    );
   });
 
   if (fs.existsSync(disabledDir)) {
@@ -1205,7 +1493,15 @@ function scanSkillDir(dirPath, scope, target, stateIndex) {
         return;
       }
       records.push(
-        buildSkillRecord(entry.name, path.join(disabledDir, entry.name), scope, target, true, stateIndex)
+        buildSkillRecord(
+          entry.name,
+          path.join(disabledDir, entry.name),
+          scope,
+          target,
+          true,
+          stateIndex,
+          projectId
+        )
       );
     });
   }
@@ -1213,7 +1509,7 @@ function scanSkillDir(dirPath, scope, target, stateIndex) {
   return records;
 }
 
-function buildSkillRecord(name, entryPath, scope, target, disabled, stateIndex) {
+function buildSkillRecord(name, entryPath, scope, target, disabled, stateIndex, projectId) {
   const record = {
     name,
     scope,
@@ -1257,7 +1553,7 @@ function buildSkillRecord(name, entryPath, scope, target, disabled, stateIndex) 
   }
 
   if (stateIndex) {
-    const entry = stateIndex.get(stateKey(name, scope, target));
+    const entry = stateIndex.get(stateKey(name, scope, target, projectId));
     if (entry) {
       record.managed = true;
       if (entry.source && !record.source) {
@@ -1357,7 +1653,13 @@ function printSkillList(records, format) {
 function resolveSkillMatches(name, options, env, stateIndex, defaultScope) {
   const scopeInfo = normalizeScopeList(options.scope, env.projectRoot, defaultScope || "both");
   const targetInfo = normalizeTargetList(options.target, "both");
-  const scan = scanSkills(env.scopeDirs, scopeInfo.scopes, targetInfo.targets, stateIndex);
+  const scan = scanSkills(
+    env.scopeDirs,
+    scopeInfo.scopes,
+    targetInfo.targets,
+    stateIndex,
+    env.projectId
+  );
   const matches = scan.records.filter((record) => record.name === name);
   return { matches, scopeInfo, targetInfo, warnings: [...scopeInfo.warnings, ...targetInfo.warnings] };
 }
@@ -1401,7 +1703,13 @@ function handleSkillsList(options, args, settings) {
   const state = loadStateFile(env.statePath);
   const stateIndex = indexStateEntries(state);
 
-  const scan = scanSkills(env.scopeDirs, scopeInfo.scopes, targetInfo.targets, stateIndex);
+  const scan = scanSkills(
+    env.scopeDirs,
+    scopeInfo.scopes,
+    targetInfo.targets,
+    stateIndex,
+    env.projectId
+  );
   [...scopeInfo.warnings, ...targetInfo.warnings, ...scan.warnings].forEach((warning) =>
     console.error(`Warning: ${warning}`)
   );
@@ -1422,7 +1730,13 @@ function handleSkillsInfo(options, args, settings) {
   const targetInfo = normalizeTargetList(options.target, "both");
   const state = loadStateFile(env.statePath);
   const stateIndex = indexStateEntries(state);
-  const scan = scanSkills(env.scopeDirs, scopeInfo.scopes, targetInfo.targets, stateIndex);
+  const scan = scanSkills(
+    env.scopeDirs,
+    scopeInfo.scopes,
+    targetInfo.targets,
+    stateIndex,
+    env.projectId
+  );
   [...scopeInfo.warnings, ...targetInfo.warnings, ...scan.warnings].forEach((warning) =>
     console.error(`Warning: ${warning}`)
   );
@@ -1498,11 +1812,13 @@ function handleSkillsAdd(options, args, settings) {
       });
       created.push({ scope, target, path: targetPath, mode: install.mode });
 
-      const key = stateKey(resolved.name, scope, target);
+      const projectId = scope === "project" ? env.projectId : "global";
+      const key = stateKey(resolved.name, scope, target, projectId);
       const entry = stateIndex.get(key) || {
         name: resolved.name,
         scope,
         target,
+        project_id: projectId,
         managed_by: "apb",
         installed_at: now,
       };
@@ -1578,7 +1894,7 @@ function handleSkillsRemove(options, args, settings) {
   const skipped = [];
 
   matches.forEach((match) => {
-    const key = stateKey(match.name, match.scope, match.target);
+    const key = stateKey(match.name, match.scope, match.target, env.projectId);
     const managed = stateIndex.has(key);
     if (!managed && !options.force) {
       skipped.push({ scope: match.scope, target: match.target, path: match.path });
@@ -1630,6 +1946,16 @@ function handleSkillsDisable(options, args, settings) {
     process.exitCode = 1;
     return Promise.resolve();
   }
+  const unmanaged = candidates.filter((match) => !match.managed);
+  if (unmanaged.length && !options.force) {
+    unmanaged.forEach((match) =>
+      console.error(
+        `Refusing to disable unmanaged ${match.scope}/${match.target}: ${match.path} (use --force to adopt it)`
+      )
+    );
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
 
   const hasFilters = Boolean(options.scope || options.target);
   if (!hasFilters && candidates.length > 1) {
@@ -1663,8 +1989,21 @@ function handleSkillsDisable(options, args, settings) {
     }
     disabled.push({ scope: match.scope, target: match.target, path: disabledPath });
 
-    const key = stateKey(match.name, match.scope, match.target);
-    const entry = stateIndex.get(key);
+    const key = stateKey(match.name, match.scope, match.target, env.projectId);
+    let entry = stateIndex.get(key);
+    if (!entry && options.force) {
+      entry = {
+        name: match.name,
+        scope: match.scope,
+        target: match.target,
+        project_id: match.scope === "project" ? env.projectId : "global",
+        source: match.source || match.path,
+        mode: match.mode,
+        managed_by: "apb",
+        installed_at: now,
+      };
+      stateIndex.set(key, entry);
+    }
     if (entry) {
       entry.disabled = true;
       entry.updated_at = now;
@@ -1703,6 +2042,16 @@ function handleSkillsEnable(options, args, settings) {
     process.exitCode = 1;
     return Promise.resolve();
   }
+  const unmanaged = candidates.filter((match) => !match.managed);
+  if (unmanaged.length && !options.force) {
+    unmanaged.forEach((match) =>
+      console.error(
+        `Refusing to enable unmanaged ${match.scope}/${match.target}: ${match.path} (use --force to adopt it)`
+      )
+    );
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
 
   const hasFilters = Boolean(options.scope || options.target);
   if (!hasFilters && candidates.length > 1) {
@@ -1734,8 +2083,21 @@ function handleSkillsEnable(options, args, settings) {
     }
     enabled.push({ scope: match.scope, target: match.target, path: targetPath });
 
-    const key = stateKey(match.name, match.scope, match.target);
-    const entry = stateIndex.get(key);
+    const key = stateKey(match.name, match.scope, match.target, env.projectId);
+    let entry = stateIndex.get(key);
+    if (!entry && options.force) {
+      entry = {
+        name: match.name,
+        scope: match.scope,
+        target: match.target,
+        project_id: match.scope === "project" ? env.projectId : "global",
+        source: match.source || targetPath,
+        mode: match.mode,
+        managed_by: "apb",
+        installed_at: now,
+      };
+      stateIndex.set(key, entry);
+    }
     if (entry) {
       entry.disabled = false;
       entry.updated_at = now;
@@ -1783,7 +2145,13 @@ function handleSkillsDoctor(options, args, settings) {
   const targetInfo = normalizeTargetList(options.target, "both");
   const state = loadStateFile(env.statePath);
   const stateIndex = indexStateEntries(state);
-  const scan = scanSkills(env.scopeDirs, scopeInfo.scopes, targetInfo.targets, stateIndex);
+  const scan = scanSkills(
+    env.scopeDirs,
+    scopeInfo.scopes,
+    targetInfo.targets,
+    stateIndex,
+    env.projectId
+  );
 
   const issues = [];
   const duplicateKeys = new Set();
@@ -1805,6 +2173,13 @@ function handleSkillsDoctor(options, args, settings) {
   });
 
   state.skills.forEach((entry) => {
+    if (
+      !isStateEntryInEnvironment(entry, env) ||
+      !scopeInfo.scopes.includes(entry.scope) ||
+      !targetInfo.targets.includes(entry.target)
+    ) {
+      return;
+    }
     const dirs = env.scopeDirs[entry.scope];
     if (!dirs) {
       return;
@@ -1836,6 +2211,13 @@ function handleSkillsDoctor(options, args, settings) {
     let fixedCount = 0;
 
     state.skills.forEach((entry) => {
+      if (
+        !isStateEntryInEnvironment(entry, env) ||
+        !scopeInfo.scopes.includes(entry.scope) ||
+        !targetInfo.targets.includes(entry.target)
+      ) {
+        return;
+      }
       const dirs = env.scopeDirs[entry.scope];
       if (!dirs) {
         return;
@@ -1911,6 +2293,10 @@ function handleSkillsSync(options, args, settings) {
 
   const nextSkills = [];
   state.skills.forEach((entry) => {
+    if (!isStateEntryInEnvironment(entry, env)) {
+      nextSkills.push(entry);
+      return;
+    }
     const dirs = env.scopeDirs[entry.scope];
     if (!dirs) {
       changed = true;
@@ -1977,6 +2363,9 @@ function handleSkillsUpgrade(options, args, settings) {
   let skipped = 0;
 
   state.skills.forEach((entry) => {
+    if (!isStateEntryInEnvironment(entry, env)) {
+      return;
+    }
     if (entry.disabled) {
       skipped += 1;
       return;
@@ -2042,7 +2431,7 @@ function handleSkillsExport(options, args, settings) {
   const resolved = path.resolve(outputPath);
   ensureDir(path.dirname(resolved), options["dry-run"]);
   if (!options["dry-run"]) {
-    fs.writeFileSync(resolved, JSON.stringify(state, null, 2));
+    writeJsonAtomic(resolved, state);
   }
   console.log(`Exported state to ${resolved}`);
   if (options["dry-run"]) {
@@ -2080,11 +2469,8 @@ function handleSkillsImport(options, args, settings) {
   const now = new Date().toISOString();
   const defaultMode = resolveInstallMode(options, "link");
   const skills = Array.isArray(imported.skills) ? imported.skills : [];
-  const state = {
-    version: imported.version || "1",
-    updated_at: now,
-    skills: [],
-  };
+  const state = loadStateFile(env.statePath);
+  const stateIndex = indexStateEntries(state);
 
   let applied = 0;
   let skipped = 0;
@@ -2100,12 +2486,16 @@ function handleSkillsImport(options, args, settings) {
     }
 
     const stateEntry = { ...entry };
+    stateEntry.project_id = entry.scope === "project" ? env.projectId : "global";
     if (stateEntry.mode && !VALID_INSTALL_MODES.has(stateEntry.mode)) {
       stateEntry.mode = defaultMode;
     }
 
     if (entry.disabled) {
-      state.skills.push(stateEntry);
+      stateIndex.set(
+        stateKey(stateEntry.name, stateEntry.scope, stateEntry.target, stateEntry.project_id),
+        stateEntry
+      );
       return;
     }
     const dirs = env.scopeDirs[entry.scope];
@@ -2148,10 +2538,16 @@ function handleSkillsImport(options, args, settings) {
       dryRun: options["dry-run"],
     });
     stateEntry.updated_at = now;
-    state.skills.push(stateEntry);
+    stateIndex.set(
+      stateKey(stateEntry.name, stateEntry.scope, stateEntry.target, stateEntry.project_id),
+      stateEntry
+    );
     applied += 1;
   });
 
+  state.version = "2";
+  state.updated_at = now;
+  state.skills = Array.from(stateIndex.values());
   saveStateFile(env.statePath, state, options["dry-run"]);
   console.log(`Imported state (${applied} applied, ${skipped} skipped).`);
   if (options["dry-run"]) {
@@ -2214,7 +2610,7 @@ function updateClaudeSettings(settings, cliPath, options) {
   if (!options["dry-run"]) {
     backupFile(settingsPath);
     ensureDir(path.dirname(settingsPath), false);
-    fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2));
+    writeJsonAtomic(settingsPath, data);
   }
   return true;
 }
@@ -2222,18 +2618,20 @@ function updateClaudeSettings(settings, cliPath, options) {
 function removeHooks(settings) {
   const settingsPath = settings.claudeSettingsPath;
   const data = readJsonSafe(settingsPath);
-  if (!data || !data.hooks) {
+  if (!data) {
     return;
   }
 
-  const marker = `--hook-source ${HOOK_SOURCE_VALUE}`;
-  data.hooks = removeHookCommand(data.hooks, "SessionEnd", marker);
-  data.hooks = removeHookCommand(data.hooks, "PostToolUse", marker);
-  data.hooks = removeHookCommand(data.hooks, "PostToolUseFailure", marker);
+  if (data.hooks) {
+    const marker = `--hook-source ${HOOK_SOURCE_VALUE}`;
+    data.hooks = removeHookCommand(data.hooks, "SessionEnd", marker);
+    data.hooks = removeHookCommand(data.hooks, "PostToolUse", marker);
+    data.hooks = removeHookCommand(data.hooks, "PostToolUseFailure", marker);
+  }
 
   delete data.agentPlaybook;
 
-  fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2));
+  writeJsonAtomic(settingsPath, data);
 }
 
 function updateCodexConfig(settings, options) {
@@ -2250,7 +2648,7 @@ function updateCodexConfig(settings, options) {
   });
 
   backupFile(configPath);
-  fs.writeFileSync(configPath, updated);
+  writeFileAtomic(configPath, updated);
 }
 
 function removeCodexConfig(settings) {
@@ -2260,7 +2658,25 @@ function removeCodexConfig(settings) {
   }
   const content = fs.readFileSync(configPath, "utf8");
   const cleaned = removeCodexBlock(content);
-  fs.writeFileSync(configPath, cleaned);
+  writeFileAtomic(configPath, cleaned ? `${cleaned}\n` : "");
+}
+
+function assertCodexConfigReadable(settings) {
+  const configPath = settings.codexConfigPath;
+  if (!fs.existsSync(configPath)) {
+    return;
+  }
+  removeCodexBlock(fs.readFileSync(configPath, "utf8"));
+}
+
+function assertClaudeSettingsReadable(settings) {
+  const settingsPath = settings.claudeSettingsPath;
+  const data = readJsonStrict(settingsPath, null);
+  if (data !== null && (typeof data !== "object" || Array.isArray(data))) {
+    const error = new Error(`Invalid Claude settings schema in ${settingsPath}; refusing mutation.`);
+    error.code = "APB_INVALID_CLAUDE_SETTINGS";
+    throw error;
+  }
 }
 
 function removeLocalCli(settings) {
@@ -2268,15 +2684,6 @@ function removeLocalCli(settings) {
   if (fs.existsSync(cliRoot)) {
     fs.rmSync(cliRoot, { recursive: true, force: true });
   }
-}
-
-function removeLinks(links) {
-  links.forEach((link) => {
-    if (!link || !link.target) {
-      return;
-    }
-    safeUnlink(link.target);
-  });
 }
 
 function ensureHook(hooks, eventName, matcher, command) {
@@ -2316,27 +2723,6 @@ function removeHookCommand(hooks, eventName, command) {
   return hooks;
 }
 
-function upsertCodexBlock(content, values) {
-  const cleaned = removeCodexBlock(content);
-  const lines = [
-    cleaned.trimEnd(),
-    "",
-    "[agent_playbook]",
-    `version = \"${values.version}\"`,
-    `installed_at = \"${values.installed_at}\"`,
-    "",
-  ];
-  return lines.join("\n");
-}
-
-function removeCodexBlock(content) {
-  const pattern = /^\[agent_playbook\][\s\S]*?(?=^\[|\s*$)/gm;
-  const cleaned = content.replace(pattern, "");
-  const legacyPattern =
-    /(?:\n\s*version\s*=\s*\"[^\"]*\"\s*\n\s*installed_at\s*=\s*\"[^\"]*\"\s*)+$/;
-  return cleaned.replace(legacyPattern, "\n").trimEnd();
-}
-
 function buildHookCommand(cliPath, subcommand) {
   return `${shellQuote(cliPath)} ${subcommand}`;
 }
@@ -2349,17 +2735,11 @@ function shellQuote(value) {
   return `'${text.replace(/'/g, "'\\''")}'`;
 }
 
-function resolveSessionDir(explicit, cwd) {
+function resolveSessionDir(explicit, dataRoot, projectId) {
   if (explicit) {
     return path.resolve(explicit);
   }
-
-  const repoRoot = findRepoRoot(cwd);
-  if (repoRoot) {
-    return path.join(repoRoot, DEFAULT_SESSION_DIR);
-  }
-
-  return path.join(os.homedir(), ".claude", DEFAULT_SESSION_DIR);
+  return path.join(dataRoot, DEFAULT_SESSION_DIR, projectId);
 }
 
 function readTranscript(transcriptPath) {
@@ -2397,7 +2777,7 @@ function resolveUniquePath(filePath) {
   return candidate;
 }
 
-function collectTranscriptInsights(events) {
+function collectTranscriptInsights(events, projectRoot) {
   const insights = {
     userMessages: [],
     assistantMessages: [],
@@ -2409,7 +2789,7 @@ function collectTranscriptInsights(events) {
 
   events.forEach((event) => {
     const role = getEventRole(event);
-    const text = extractEventText(event);
+    const text = redactSensitiveText(extractEventText(event), projectRoot);
 
     if (!text) {
       return;
@@ -2562,10 +2942,9 @@ function buildTopic(prompt, cwd) {
   return slugify(path.basename(cwd)) || "session";
 }
 
-function buildSessionSummary(insights, sessionId, cwd) {
+function buildSessionSummary(insights, sessionId, projectId) {
   const now = new Date();
   const date = formatDate(now);
-  const repoRoot = findRepoRoot(cwd) || cwd;
   const title = insights.lastUserPrompt ? trimTo(insights.lastUserPrompt, 60) : "Session";
   const actions = insights.commands.length
     ? insights.commands.map((cmd) => `- [x] \`${trimTo(cmd, 120)}\``)
@@ -2582,7 +2961,7 @@ function buildSessionSummary(insights, sessionId, cwd) {
     "",
     `**Date**: ${date}`,
     `**Duration**: unknown`,
-    `**Context**: ${repoRoot}`,
+    `**Context**: ${projectId}`,
     `**Agent Playbook Version**: ${VERSION}`,
     "",
     "## Summary",
@@ -2601,8 +2980,7 @@ function buildSessionSummary(insights, sessionId, cwd) {
     ...actions,
     "",
     "## Technical Notes",
-    `Session ID: ${sessionId}`,
-    `Working directory: ${cwd}`,
+    `Session reference: ${hashIdentity(sessionId)}`,
     "",
     "## Open Questions / Follow-ups",
     ...questions,
@@ -2617,6 +2995,14 @@ function buildSessionSummary(insights, sessionId, cwd) {
 
 function collectStatus(settings) {
   const claudeSettings = readJsonSafe(settings.claudeSettingsPath);
+  const manifestPath = path.join(settings.claudeSkillsDir, ".agent-playbook.json");
+  const manifest = readJsonSafe(manifestPath);
+  const manifestPresent = fs.existsSync(manifestPath);
+  const manifestReadable = manifest !== null || !manifestPresent;
+  const hooksExpected = !manifest || manifest.hooksEnabled !== false;
+  const localCliPackagePath = path.join(settings.claudeDir, LOCAL_CLI_DIR, "package.json");
+  const localCliPackage = readJsonSafe(localCliPackagePath);
+  const localCliVersion = localCliPackage && localCliPackage.version;
   return {
     skillsSource: settings.skillsSource,
     claudeSettingsPath: settings.claudeSettingsPath,
@@ -2626,10 +3012,16 @@ function collectStatus(settings) {
     geminiSkillsDir: settings.geminiSkillsDir,
     dshSkillsDir: settings.dshSkillsDir,
     claudeSettingsReadable: claudeSettings !== null || !fs.existsSync(settings.claudeSettingsPath),
+    stateReadable: isJsonReadable(settings.statePath),
+    manifestReadable,
+    hooksExpected,
+    codexConfigReadable: isCodexConfigReadable(settings.codexConfigPath),
     codexBlockPresent: hasCodexBlock(settings.codexConfigPath),
     hooksInstalled: hasHooks(settings.claudeSettingsPath),
-    manifestPresent: fs.existsSync(path.join(settings.claudeSkillsDir, ".agent-playbook.json")),
+    manifestPresent,
     localCliPresent: fs.existsSync(path.join(settings.claudeDir, LOCAL_CLI_DIR, "bin", "agent-playbook.js")),
+    localCliVersion: localCliVersion || null,
+    localCliVersionMatches: localCliVersion === VERSION,
     claudeSkillCount: countSkills(settings.claudeSkillsDir),
     codexSkillCount: countSkills(settings.codexSkillsDir),
     geminiSkillCount: countSkills(settings.geminiSkillsDir),
@@ -2659,14 +3051,27 @@ function summarizeIssues(status) {
   if (!status.claudeSettingsReadable) {
     issues.push("unable to parse ~/.claude/settings.json");
   }
+  if (!status.stateReadable) {
+    issues.push("unable to parse Agent Playbook state.json; refusing fail-open recovery");
+  }
+  if (!status.manifestReadable) {
+    issues.push("unable to parse Claude skill manifest (.agent-playbook.json)");
+  }
+  if (!status.codexConfigReadable) {
+    issues.push("malformed Agent Playbook marker block in Codex config");
+  }
   if (!status.manifestPresent) {
     issues.push("missing Claude skill manifest (.agent-playbook.json)");
   }
-  if (!status.hooksInstalled) {
+  if (status.hooksExpected && !status.hooksInstalled) {
     issues.push("Claude hooks not installed");
   }
-  if (!status.localCliPresent) {
+  if (status.hooksExpected && !status.localCliPresent) {
     issues.push("Claude local CLI not installed under ~/.claude/agent-playbook");
+  } else if (status.hooksExpected && !status.localCliVersionMatches) {
+    issues.push(
+      `Claude hook CLI version mismatch (installed ${status.localCliVersion || "unknown"}, expected ${VERSION})`
+    );
   }
   if (!status.codexBlockPresent) {
     issues.push("Codex config missing agent_playbook block");
@@ -2687,9 +3092,16 @@ function printStatus(status) {
   console.log(`- Codex skills count: ${status.codexSkillCount}`);
   console.log(`- Gemini skills count: ${status.geminiSkillCount}`);
   console.log(`- DeepSeek Harness skills count: ${status.dshSkillCount}`);
+  console.log(`- Claude hooks expected: ${status.hooksExpected ? "yes" : "no"}`);
   console.log(`- Claude hooks installed: ${status.hooksInstalled ? "yes" : "no"}`);
   console.log(`- Claude manifest present: ${status.manifestPresent ? "yes" : "no"}`);
   console.log(`- Claude local CLI present: ${status.localCliPresent ? "yes" : "no"}`);
+  console.log(`- Claude local CLI version: ${status.localCliVersion || "unknown"}`);
+  console.log(
+    `- Hook CLI matches package: ${
+      status.hooksExpected ? (status.localCliVersionMatches ? "yes" : "no") : "n/a (hooks disabled)"
+    }`
+  );
   console.log(`- Codex config block: ${status.codexBlockPresent ? "yes" : "no"}`);
 }
 
@@ -2783,6 +3195,18 @@ function hasCodexBlock(configPath) {
   return /^\[agent_playbook\]/m.test(content);
 }
 
+function isCodexConfigReadable(configPath) {
+  if (!fs.existsSync(configPath)) {
+    return true;
+  }
+  try {
+    removeCodexBlock(fs.readFileSync(configPath, "utf8"));
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 function backupFile(filePath) {
   if (!fs.existsSync(filePath)) {
     return;
@@ -2824,27 +3248,15 @@ function readJsonSafe(filePath) {
   }
 }
 
-function writeJson(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-}
-
-function writeJsonAtomic(filePath, data) {
-  writeFileAtomic(filePath, `${JSON.stringify(data, null, 2)}\n`);
-}
-
-function writeFileAtomic(filePath, content) {
-  ensureDir(path.dirname(filePath), false);
-  const tempPath = path.join(
-    path.dirname(filePath),
-    `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(3).toString("hex")}.tmp`
-  );
+function isJsonReadable(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return true;
+  }
   try {
-    fs.writeFileSync(tempPath, content, { encoding: "utf8", mode: 0o600 });
-    fs.renameSync(tempPath, filePath);
-  } finally {
-    if (fs.existsSync(tempPath)) {
-      fs.unlinkSync(tempPath);
-    }
+    readJsonStrict(filePath);
+    return true;
+  } catch (error) {
+    return false;
   }
 }
 
@@ -2903,9 +3315,16 @@ function readStdinJson() {
 module.exports = { main };
 function handleRepair(options, context) {
   const settings = resolveSettings(options, context);
+  assertCodexConfigReadable(settings);
   const status = collectStatus(settings);
   const warnings = [];
+  const hooksEnabled = options.hooks !== false;
+  if (hooksEnabled) {
+    assertClaudeSettingsReadable(settings);
+  }
   const overwriteState = createOverwriteState(options);
+  const manifestPath = path.join(settings.claudeSkillsDir, ".agent-playbook.json");
+  const previousManifest = readJsonStrict(manifestPath, null);
 
   if (!settings.skillsSource) {
     warnings.push("Skills directory not found; skipping skill linking.");
@@ -2918,11 +3337,8 @@ function handleRepair(options, context) {
     ensureDir(settings.dshSkillsDir, false);
   }
 
-  if (!status.localCliPresent) {
+  if (hooksEnabled) {
     ensureLocalCli(settings, context, options);
-  }
-
-  if (!status.hooksInstalled) {
     const updated = updateClaudeSettings(
       settings,
       path.join(settings.claudeDir, LOCAL_CLI_DIR, "bin", "agent-playbook.js"),
@@ -2938,28 +3354,65 @@ function handleRepair(options, context) {
   }
 
   if (settings.skillsSource) {
-    linkSkills(settings.skillsSource, settings.claudeSkillsDir, options, overwriteState);
-    linkSkills(settings.skillsSource, settings.codexSkillsDir, options, overwriteState);
-    linkSkills(settings.skillsSource, settings.geminiSkillsDir, options, overwriteState);
-    linkSkills(settings.skillsSource, settings.dshSkillsDir, options, overwriteState);
+    const claudeLinks = linkSkills(
+      settings.skillsSource,
+      settings.claudeSkillsDir,
+      options,
+      overwriteState
+    );
+    const codexLinks = linkSkills(
+      settings.skillsSource,
+      settings.codexSkillsDir,
+      options,
+      overwriteState
+    );
+    const geminiLinks = linkSkills(
+      settings.skillsSource,
+      settings.geminiSkillsDir,
+      options,
+      overwriteState
+    );
+    const dshLinks = linkSkills(
+      settings.skillsSource,
+      settings.dshSkillsDir,
+      options,
+      overwriteState
+    );
     if (!options["dry-run"]) {
-      const manifestPath = path.join(settings.claudeSkillsDir, ".agent-playbook.json");
-      if (!fs.existsSync(manifestPath)) {
-        writeJson(manifestPath, {
-          name: APP_NAME,
-          version: VERSION,
-          installedAt: new Date().toISOString(),
-          repairedAt: new Date().toISOString(),
-          repoRoot: settings.repoRoot,
-          links: { claude: [], codex: [], gemini: [], dsh: [] },
-        });
-      }
+      const previousLinks = previousManifest && previousManifest.links ? previousManifest.links : {};
+      writeJsonAtomic(manifestPath, {
+        name: APP_NAME,
+        version: VERSION,
+        installedAt:
+          (previousManifest && previousManifest.installedAt) || new Date().toISOString(),
+        repairedAt: new Date().toISOString(),
+        repoRoot: settings.repoRoot,
+        hooksEnabled: hasHooks(settings.claudeSettingsPath),
+        links: {
+          claude: collectManagedResources(
+            previousLinks.claude,
+            claudeLinks,
+            settings.claudeSkillsDir
+          ),
+          codex: collectManagedResources(
+            previousLinks.codex,
+            codexLinks,
+            settings.codexSkillsDir
+          ),
+          gemini: collectManagedResources(
+            previousLinks.gemini,
+            geminiLinks,
+            settings.geminiSkillsDir
+          ),
+          dsh: collectManagedResources(previousLinks.dsh, dshLinks, settings.dshSkillsDir),
+        },
+      });
     }
   }
 
   printInitSummary(
     settings,
-    true,
+    options["dry-run"] ? hooksEnabled : hasHooks(settings.claudeSettingsPath),
     options,
     { created: [], skipped: [] },
     { created: [], skipped: [] },

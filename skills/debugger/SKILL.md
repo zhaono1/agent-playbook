@@ -238,7 +238,7 @@ function processBatch(items, options) {
 
 Generate a debug report:
 ```bash
-python scripts/debug_report.py <error-message>
+python3 scripts/debug_report.py --name <error-message> --output debug-report.md
 ```
 
 ## References

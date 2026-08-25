@@ -225,12 +225,12 @@ X-RateLimit-Reset: 1631234567
 
 Generate API scaffold:
 ```bash
-python scripts/generate_api.py <resource-name>
+python3 scripts/generate_api.py --name <resource-name> --output api-design.md
 ```
 
 Validate API design:
 ```bash
-python scripts/validate_api.py openapi.yaml
+python3 scripts/validate_api.py --input api-design.md
 ```
 
 ## References

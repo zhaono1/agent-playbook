@@ -1,6 +1,6 @@
 # Commit Helper
 
-> A Claude Code skill for writing Git commit messages following the Conventional Commits specification.
+> A portable agent skill for writing Git commit messages following the Conventional Commits specification.
 
 ## Installation
 
@@ -49,7 +49,7 @@ from causing request timeouts.
 The skill includes a validation script to check commit message format:
 
 ```bash
-python scripts/validate_commit.py "feat(api): add user endpoint"
+python3 scripts/validate_commit.py "feat(api): add user endpoint"
 ```
 
 ## References

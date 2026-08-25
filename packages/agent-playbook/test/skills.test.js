@@ -38,6 +38,7 @@ test("skills list returns global skills across targets", () => {
       encoding: "utf8",
       env: {
         ...process.env,
+        AGENT_PLAYBOOK_DATA_DIR: path.join(tempDir, "data"),
         AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
         AGENT_PLAYBOOK_CODEX_DIR: codexDir,
         AGENT_PLAYBOOK_GEMINI_DIR: geminiDir,
@@ -79,6 +80,7 @@ test("skills add installs a DeepSeek Harness project skill", () => {
       encoding: "utf8",
       env: {
         ...process.env,
+        AGENT_PLAYBOOK_DATA_DIR: path.join(tempDir, "data"),
         AGENT_PLAYBOOK_CLAUDE_DIR: path.join(tempDir, "claude"),
         AGENT_PLAYBOOK_CODEX_DIR: path.join(tempDir, "codex"),
         AGENT_PLAYBOOK_GEMINI_DIR: path.join(tempDir, "gemini"),
@@ -106,6 +108,7 @@ test("skills add writes state and copies skill", () => {
       encoding: "utf8",
       env: {
         ...process.env,
+        AGENT_PLAYBOOK_DATA_DIR: path.join(tempDir, "data"),
         AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
         AGENT_PLAYBOOK_CODEX_DIR: path.join(tempDir, "codex"),
         AGENT_PLAYBOOK_GEMINI_DIR: path.join(tempDir, "gemini"),
@@ -117,7 +120,7 @@ test("skills add writes state and copies skill", () => {
   const installedPath = path.join(claudeDir, "skills", "delta", "SKILL.md");
   assert.ok(fs.existsSync(installedPath));
 
-  const statePath = path.join(claudeDir, "agent-playbook", "state.json");
+  const statePath = path.join(tempDir, "data", "state.json");
   const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
   const entry = state.skills.find((item) => item.name === "delta" && item.target === "claude");
   assert.ok(entry);
@@ -133,11 +136,23 @@ test("skills disable and enable toggles location", () => {
 
   const disableResult = spawnSync(
     process.execPath,
-    [binPath, "skills", "disable", "echo", "--scope", "global", "--target", "claude", "--overwrite"],
+    [
+      binPath,
+      "skills",
+      "disable",
+      "echo",
+      "--scope",
+      "global",
+      "--target",
+      "claude",
+      "--overwrite",
+      "--force",
+    ],
     {
       encoding: "utf8",
       env: {
         ...process.env,
+        AGENT_PLAYBOOK_DATA_DIR: path.join(tempDir, "data"),
         AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
         AGENT_PLAYBOOK_CODEX_DIR: path.join(tempDir, "codex"),
         AGENT_PLAYBOOK_GEMINI_DIR: path.join(tempDir, "gemini"),
@@ -156,6 +171,7 @@ test("skills disable and enable toggles location", () => {
       encoding: "utf8",
       env: {
         ...process.env,
+        AGENT_PLAYBOOK_DATA_DIR: path.join(tempDir, "data"),
         AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
         AGENT_PLAYBOOK_CODEX_DIR: path.join(tempDir, "codex"),
         AGENT_PLAYBOOK_GEMINI_DIR: path.join(tempDir, "gemini"),
@@ -206,6 +222,7 @@ test("skills import rejects unsafe skill names", () => {
       encoding: "utf8",
       env: {
         ...process.env,
+        AGENT_PLAYBOOK_DATA_DIR: path.join(tempDir, "data"),
         AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
         AGENT_PLAYBOOK_CODEX_DIR: path.join(tempDir, "codex"),
         AGENT_PLAYBOOK_GEMINI_DIR: path.join(tempDir, "gemini"),
@@ -217,7 +234,7 @@ test("skills import rejects unsafe skill names", () => {
   assert.ok(fs.existsSync(path.join(outsidePath, "marker.txt")));
   assert.match(result.stdout, /Imported state \(0 applied, 1 skipped\)/);
 
-  const statePath = path.join(claudeDir, "agent-playbook", "state.json");
+  const statePath = path.join(tempDir, "data", "state.json");
   const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
   assert.deepEqual(state.skills, []);
 });
@@ -226,7 +243,7 @@ test("skills upgrade ignores unsafe managed state entries", () => {
   const tempDir = makeTempDir();
   const claudeDir = path.join(tempDir, "claude");
   const sourceRoot = path.join(tempDir, "source");
-  const stateDir = path.join(claudeDir, "agent-playbook");
+  const stateDir = path.join(tempDir, "data");
   const outsidePath = path.join(claudeDir, "outside");
 
   writeSkill(sourceRoot, "safe-skill");
@@ -261,6 +278,7 @@ test("skills upgrade ignores unsafe managed state entries", () => {
       encoding: "utf8",
       env: {
         ...process.env,
+        AGENT_PLAYBOOK_DATA_DIR: stateDir,
         AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
         AGENT_PLAYBOOK_CODEX_DIR: path.join(tempDir, "codex"),
         AGENT_PLAYBOOK_GEMINI_DIR: path.join(tempDir, "gemini"),

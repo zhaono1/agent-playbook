@@ -1,6 +1,6 @@
 ---
 name: skill-router
-description: Intelligently routes user requests to the most appropriate Claude Code skill. ALWAYS use this skill FIRST when user asks for help, mentions "skill", "which", "how to", or seems unsure about which approach to take. This is the default entry point for all skill-related requests.
+description: Routes an agent request to the narrowest matching portable skill when the user asks which skill to use or needs help selecting one across supported hosts.
 allowed-tools: Read, AskUserQuestion, WebSearch, Grep
 metadata:
   hooks:
@@ -12,7 +12,9 @@ metadata:
 
 # Skill Router
 
-An intelligent router that analyzes user requests and recommends the most appropriate Claude Code skill for the task.
+Analyze the request and recommend the narrowest matching skill exposed by the
+current host. Do not assume Claude Code, Codex, Gemini, or DeepSeek Harness
+capabilities that are not visible in the current session.
 
 ## When This Skill Activates
 

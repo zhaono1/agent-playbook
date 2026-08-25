@@ -25,15 +25,20 @@ Always use the `create-pr` skill when:
 
 This ensures bilingual documentation stays in sync.
 
-## Commit-Triggered PRs
+## Commit, Push, and PR Boundaries
 
-When the user says commit-related keywords (for example: "commit", "提交", "提交代码"),
-create a PR immediately after committing and return the PR link without extra prompts.
+- "commit" / "提交代码" authorizes a local commit only.
+- "push" / "推送" authorizes updating the named remote branch.
+- "create PR" / "提交审核" / "提交并创建 PR" authorizes opening a pull request.
+
+Do not infer push or PR authority from a commit-only request. When the user
+explicitly asks for end-to-end submission or release, the requested chain may
+continue without redundant confirmation.
 
 ## Project Context
 
-This is the **agent-playbook** repository - a collection of Claude Code skills.
+This is the **agent-playbook** repository - a collection of portable agent skills.
 - Skills are located in `skills/` directory
 - Each skill has a `SKILL.md` file (the actual skill)
 - Each skill may have a `README.md` file (documentation)
-- Symbolic links are created in `~/.claude/skills/` for global availability
+- The CLI can install skills for Claude Code, Codex, Gemini, and DeepSeek Harness

@@ -1,276 +1,83 @@
 ---
 name: session-logger
-description: Saves conversation history to session log files. Use when user says "保存对话", "保存对话信息", "记录会话", "save session", or "save conversation". Automatically creates timestamped session log in sessions/ directory.
-allowed-tools: Read, Write, Edit, Bash
+description: Save a bounded, redacted session summary when the user asks to record a conversation or when a supported host provides an explicit session-end transcript event.
+allowed-tools: Read, Write
 ---
 
 # Session Logger
 
-A skill for automatically saving conversation history to persistent session log files.
+Create a compact recovery artifact without treating raw conversation history as
+durable memory.
 
-## When This Skill Activates
+## Use This Skill When
 
-This skill activates when you:
-- Say "保存对话信息" or "保存对话"
-- Say "记录会话内容" or "保存session"
-- Say "save session" or "save conversation"
-- Ask to save the current conversation
+- The user explicitly asks to save or record the current session.
+- A supported host invokes the Agent Playbook `SessionEnd` hook with a transcript path.
+- A later task needs a concise handoff artifact and the user has authorized writing it.
 
-## Session File Location
+Do not silently persist raw transcripts, credentials, private customer data, or
+unbounded agent output. Host support and write authority must be visible; skill
+metadata alone does not execute a hook.
 
-All sessions are saved to: `sessions/YYYY-MM-DD-{topic}.md`
+## CLI Runtime Contract
 
-## What Gets Logged
+Claude Code installation can invoke:
 
-For each session, log:
-
-1. **Metadata**
-   - Date and duration
-   - Context/working directory
-   - Main topic
-
-2. **Summary**
-   - What was accomplished
-   - Key decisions made
-   - Files created/modified
-
-3. **Actions Taken**
-   - Checklist of completed tasks
-   - Pending follow-ups
-
-4. **Technical Notes**
-   - Important code snippets
-   - Commands used
-   - Solutions found
-
-5. **Open Questions**
-   - Issues to revisit
-   - Follow-up tasks
-
-## Session Template
-
-```markdown
-# Session: {Topic}
-
-**Date**: {YYYY-MM-DD}
-**Duration**: {approximate}
-**Context**: {project/directory}
-
-## Summary
-
-{What was accomplished in this session}
-
-## Key Decisions
-
-1. {Decision 1}
-2. {Decision 2}
-
-## Actions Taken
-
-- [x] {Completed action 1}
-- [x] {Completed action 2}
-- [ ] {Pending action 3}
-
-## Technical Notes
-
-{Important technical details}
-
-## Open Questions / Follow-ups
-
-- {Question 1}
-- {Question 2}
-
-## Related Files
-
-- `{file-path}` - {what changed}
+```bash
+agent-playbook session-log
 ```
 
-## How to Use
+The command reads the host-provided JSONL transcript and stores only bounded,
+redacted details:
 
-### Option 1: Automatic Logging
+- message counts;
+- the last user prompt, truncated after redaction;
+- up to 12 detected commands and file references;
+- up to 8 detected questions;
+- a hashed session reference and project identity.
 
-Simply say:
-```
-"保存对话信息"
-```
+By default, files are private local artifacts:
 
-The skill will:
-1. Review the conversation history
-2. Extract key information
-3. Create/update the session file
-
-### Option 2: With Topic
-
-Specify the session topic:
-```
-"保存对话，主题是 skill-router 创建"
+```text
+~/.agent-playbook/sessions/<project-id>/YYYY-MM-DD-<topic>.md
 ```
 
-### Option 3: Manual Prompt
+Set `AGENT_PLAYBOOK_DATA_DIR` or pass `--data-dir` to move the private data root.
+Writing inside a repository is opt-in only:
 
-If auto-extraction misses something, provide details:
-```
-"保存对话，重点是：1) 创建了 skill-router，2) 修复了 front matter"
-```
-
-## File Naming
-
-| Input | Filename |
-|-------|----------|
-| "保存对话" | `YYYY-MM-DD-session.md` |
-| "保存对话，主题是 prd" | `YYYY-MM-DD-prd.md` |
-| "保存今天的讨论" | `YYYY-MM-DD-discussion.md` |
-
-## Session Log Structure
-
-```
-sessions/
-├── README.md                      # This file
-├── 2025-01-11-skill-router.md     # Session about skill-router
-├── 2025-01-11-prd-planner.md      # Session about PRD planner
-└── 2025-01-12-refactoring.md      # Session about refactoring
+```bash
+apb session-log --session-dir ./sessions
 ```
 
-## Privacy Note
+If a repository-local directory is selected, verify its ignore and retention
+policy before writing. Never assume another repository ignores `sessions/`.
 
-Session logs are stored in `sessions/` which is in `.gitignore`.
-- Logs are NOT committed to git
-- Logs contain your actual conversation
-- Do not include secrets, credentials, tokens, or private user data unless they are explicitly required and redacted
+## Manual Summary Contract
 
-## Quick Reference
+When the host cannot provide a transcript event, create a user-authorized
+summary from the context actually visible in the current session. Include only:
 
-| You say | Skill does |
-|---------|------------|
-| "保存对话信息" | Creates session log with today's date |
-| "保存今天的对话" | Creates session log |
-| "保存session" | Creates session log |
-| "记录会话" | Creates session log |
+1. outcome and current state;
+2. decisions that affect future work;
+3. relevant files or commands;
+4. open questions and next proof gate.
 
-## Best Practices
+State omissions honestly. Do not claim full conversation capture, structured
+decision extraction, automatic append behavior, or cross-session recall unless
+the active runtime demonstrably provides it.
 
-1. **Save at key milestones**: After completing a feature, fixing a bug, etc.
-2. **Be specific with topics**: Helps when searching later
-3. **Include code snippets**: Save important solutions
-4. **Track decisions**: Why did you choose X over Y?
-5. **List pending items**: What to do next time
+## Privacy and Safety
 
-## Rich Content Extraction (for Self-Improving Agent)
+- Redact common credentials, bearer tokens, private keys, email addresses, and
+  password/secret assignments before writing.
+- Replace the current project root with a project identity in generated metadata.
+- Write generated summaries with owner-only permissions where the platform supports it.
+- Keep the artifact local unless the user separately authorizes commit, upload, or sharing.
+- Treat redaction as risk reduction, not a guarantee that arbitrary confidential text is safe.
 
-When triggered by other skills via hooks, session-logger extracts structured data for learning:
+## Completion Check
 
-### Skill Context Capture
-
-When a skill completes, capture:
-
-```markdown
-## Skill Execution Context
-
-**Skill**: {skill-name}
-**Trigger**: {user-invoked | hook-triggered | auto-triggered}
-**Status**: {completed | error | partial}
-**Duration**: {approximate time}
-
-### Input Context
-- User request: {original request}
-- Files involved: {list of files}
-- Codebase patterns detected: {patterns}
-
-### Output Summary
-- Actions taken: {list}
-- Files modified: {list with changes}
-- Decisions made: {key decisions}
-
-### Learning Signals
-- What worked well: {successes}
-- What could improve: {areas for improvement}
-- Patterns discovered: {new patterns}
-- Errors encountered: {errors and resolutions}
-```
-
-### Error Context Capture
-
-When a skill encounters errors:
-
-```markdown
-## Error Context
-
-**Error Type**: {type}
-**Error Message**: {message}
-**Stack Trace**: {if available}
-
-### Resolution Attempted
-- Approach: {what was tried}
-- Result: {success/failure}
-- Root cause: {if identified}
-
-### Prevention Notes
-- How to avoid: {prevention strategy}
-- Related patterns: {similar issues}
-```
-
-### Pattern Extraction
-
-Extract reusable patterns for the self-improving-agent:
-
-```markdown
-## Extracted Patterns
-
-### Code Patterns
-- Pattern name: {name}
-- Context: {when to use}
-- Example: {code snippet}
-
-### Workflow Patterns
-- Trigger: {what initiates}
-- Steps: {sequence}
-- Outcome: {expected result}
-
-### Anti-Patterns
-- Pattern: {what to avoid}
-- Why: {reason}
-- Alternative: {better approach}
-```
-
-### Structured Data Format
-
-For machine-readable extraction, use YAML front matter in session logs:
-
-```yaml
----
-session_type: skill_execution
-skill_name: code-reviewer
-trigger_source: hook
-status: completed
-files_modified:
-  - path: src/utils.ts
-    changes: refactored error handling
-patterns_learned:
-  - name: error-boundary-pattern
-    category: error-handling
-    confidence: high
-errors_encountered: []
-learning_signals:
-  successes:
-    - "Identified code smell in utils.ts"
-  improvements:
-    - "Could have suggested more specific refactoring"
----
-```
-
-### Integration with Self-Improving Agent
-
-When triggered by `self-improving-agent`:
-
-1. **Extract episodic memory**: Capture the full context of what happened
-2. **Identify semantic patterns**: Tag reusable knowledge
-3. **Update working memory**: Note immediate follow-ups needed
-4. **Signal completion**: Write trigger file if skill chaining is needed
-
-### Auto-Trigger Behavior
-
-When invoked via hooks with `mode: auto`:
-- Silently create/update session log
-- Extract structured data without user interaction
-- Append to existing session if same day/topic
-- Create new session if context differs significantly
+- [ ] Destination and write authority are clear.
+- [ ] The summary is bounded and contains no known raw secret.
+- [ ] Repository-local storage was explicitly selected and ignore policy checked.
+- [ ] The returned path exists and is readable by the user.

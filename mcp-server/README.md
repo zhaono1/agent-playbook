@@ -1,13 +1,18 @@
 # Agent Playbook MCP Server
 
-A Model Context Protocol (MCP) server that exposes agent-playbook skills as tools to Claude Code.
+A Model Context Protocol (MCP) server that exposes agent-playbook skills as
+portable discovery tools. Claude Code is the documented setup example; any MCP
+client with stdio transport support can use the same tool contract.
 
 ## Features
 
 - **list_skills** - List all available skills with filtering by category
 - **get_skill** - Get detailed information about a specific skill
 - **search_skills** - Search for skills by keyword
-- **get_skill_hooks** - Get auto-trigger hooks for a skill
+- **get_skill_hooks** - Get declarative hook metadata; execution remains host-dependent
+
+The server intentionally advertises tools only. Skill files remain the source
+of truth; it does not claim MCP resources or expose host filesystem paths.
 
 ## Installation
 
@@ -115,6 +120,13 @@ With MCP integration, Claude Code can:
 - Understand skill relationships and hooks
 - Access skill descriptions without hardcoded prompts
 - Provide better skill recommendations
+
+## Compatibility Policy
+
+The MCP adapter version follows the Agent Playbook release version. Tool name,
+input-schema, or response-shape changes are documented in the repository
+changelog. MCP protocol compatibility is governed by the locked SDK version and
+verified by the server test suite.
 
 ## References
 

@@ -1,6 +1,6 @@
 # Planning With Files
 
-> A Claude Code skill for file-based planning and progress tracking.
+> A portable agent skill for file-based planning and progress tracking.
 
 ## Installation
 

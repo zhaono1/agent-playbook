@@ -193,12 +193,12 @@ it('works correctly')
 
 Generate test boilerplate:
 ```bash
-python scripts/generate_test.py <filename>
+python3 scripts/generate_test.py --name <feature> --output tests/test-plan.md
 ```
 
 Check test coverage:
 ```bash
-python scripts/coverage_report.py
+python3 scripts/coverage_report.py --name <service-name> --output coverage-report.md
 ```
 
 ## References

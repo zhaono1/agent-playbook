@@ -68,22 +68,24 @@ Agent-playbook requires manual, inconsistent setup across Claude Code and Codex.
    - Global (default) and project-level (`--project` flag).
    - Symlink by default; fallback to copy when symlink fails.
 4. Claude Code integration:
-   - Add hooks in `settings.json` for SessionEnd and PostToolUse (minimal MVP for logging).
+   - Add hooks in `settings.json` for SessionEnd and PostToolUseFailure.
    - Support opt-in `--hooks` or `--no-hooks` flags.
 5. Codex integration:
    - Detect `~/.codex/config.toml` and `~/.codex/skills`.
    - Support linking skills to user scope and/or repo `.codex/skills`.
 6. Session logging:
-   - On SessionEnd, read `transcript_path` and write `sessions/YYYY-MM-DD-{topic}.md`.
-   - Allow `--session-dir` override.
+   - On SessionEnd, read `transcript_path` and write a bounded redacted summary
+     under `~/.agent-playbook/sessions/<project-id>/`.
+   - Allow an explicit `--session-dir` override.
 7. Self-improvement MVP:
-   - On SessionEnd or PostToolUse, append a structured memory entry (raw metadata) to `~/.claude/memory/`.
+   - On PostToolUseFailure, capture a redacted candidate under
+     `~/.agent-playbook/self-improvement/`; never persist raw tool payloads.
 8. Safety:
    - Backup configs before modifying.
    - Idempotent re-runs without duplicate hooks or links.
 
 ### Non-Functional Requirements
-- macOS and Linux support in v1; Windows best-effort with clear messaging.
+- Exercise core installer behavior on macOS, Linux, and Windows CI.
 - No destructive actions without confirmation; support `--dry-run`.
 - All modifications are reversible by `uninstall`.
 - Minimal external dependencies; no network needed after install.

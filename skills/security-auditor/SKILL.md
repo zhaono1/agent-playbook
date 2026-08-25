@@ -25,201 +25,59 @@ Activates when you:
 - Need security review
 - Ask about OWASP
 
-## OWASP Top 10 Coverage
+## OWASP Top 10:2025 Coverage
+
+Use the current OWASP Top 10 as an awareness taxonomy, not as proof of complete
+security coverage. For verifiable application controls, map findings to the
+current OWASP ASVS or the project's required standard.
 
 ### A01: Broken Access Control
 
-**Checks:**
-```bash
-# Check for missing auth on protected routes
-grep -r "@RequireAuth\|@Protected" src/
+- Verify authentication and object/function-level authorization on every sensitive path.
+- Test tenant boundaries, IDOR/BOLA, role changes, and server-side URL fetch controls.
+- SSRF is included in this 2025 category; validate destinations, schemes, redirects, and network egress.
 
-# Check for IDOR vulnerabilities
-grep -r "req.params.id\|req.query.id" src/
+### A02: Security Misconfiguration
 
-# Check for role-based access
-grep -r "if.*role.*===" src/
-```
+- Inspect debug flags, CORS, security headers, default accounts, cloud/IaC policy, and error exposure.
+- Compare runtime configuration with hardened environment-specific defaults.
 
-**Common Issues:**
-- Missing authentication on sensitive endpoints
-- IDOR: Users can access other users' data
-- Missing authorization checks
-- API keys in URL
+### A03: Software Supply Chain Failures
 
-### A02: Cryptographic Failures
+- Review lockfiles, provenance, build workflows, mutable CI dependencies, update policy, and dependency risk.
+- Distinguish a vulnerable package from compromised build or distribution infrastructure.
 
-**Checks:**
-```bash
-# Check for hardcoded secrets
-grep -ri "password.*=.*['\"]" src/
-grep -ri "api_key.*=.*['\"]" src/
-grep -ri "secret.*=.*['\"]" src/
+### A04: Cryptographic Failures
 
-# Check for weak hashing
-grep -r "md5\|sha1" src/
+- Check secret storage, transport encryption, key lifecycle, random generation, algorithms, and data-at-rest requirements.
+- Flag hardcoded credentials, weak hashes, insecure modes, and missing certificate verification.
 
-# Check for http URLs
-grep -r "http:\/\/" src/
-```
+### A05: Injection
 
-**Common Issues:**
-- Hardcoded credentials
-- Weak hashing algorithms (MD5, SHA1)
-- Unencrypted sensitive data
-- HTTP instead of HTTPS
+- Trace untrusted data into SQL/NoSQL, shell, template, LDAP, expression, and browser execution sinks.
+- Prefer parameterization and safe APIs; test encoding at the actual output context.
 
-### A03: Injection
+### A06: Insecure Design
 
-**Checks:**
-```bash
-# SQL injection patterns
-grep -r "\".*SELECT.*+.*\"" src/
-grep -r "\".*UPDATE.*SET.*+.*\"" src/
-
-# Command injection
-grep -r "exec(\|system(\|spawn(" src/
-grep -r "child_process.exec" src/
-
-# Template injection
-grep -r "render.*req\." src/
-```
-
-**Common Issues:**
-- SQL injection
-- NoSQL injection
-- Command injection
-- XSS (Cross-Site Scripting)
-- Template injection
-
-### A04: Insecure Design
-
-**Checks:**
-```bash
-# Check for rate limiting
-grep -r "rateLimit\|rate-limit\|throttle" src/
-
-# Check for 2FA
-grep -r "twoFactor\|2fa\|mfa" src/
-
-# Check for session timeout
-grep -r "maxAge\|expires\|timeout" src/
-```
-
-**Common Issues:**
-- No rate limiting on auth endpoints
-- Missing 2FA for sensitive operations
-- Session timeout too long
-- No account lockout after failed attempts
-
-### A05: Security Misconfiguration
-
-**Checks:**
-```bash
-# Check for debug mode
-grep -r "DEBUG.*=.*True\|debug.*=.*true" src/
-
-# Check for CORS configuration
-grep -r "origin.*\*" src/
-
-# Check for error messages
-grep -r "console\.log.*error\|console\.error" src/
-```
-
-**Common Issues:**
-- Debug mode enabled in production
-- Overly permissive CORS
-- Verbose error messages
-- Default credentials not changed
-
-### A06: Vulnerable Components
-
-**Checks:**
-```bash
-# Check package files
-cat package.json | grep -E "\"dependencies\"|\"devDependencies\""
-cat requirements.txt
-cat go.mod
-
-# Run vulnerability scanner
-npm audit
-pip-audit
-```
-
-**Common Issues:**
-- Outdated dependencies
-- Known vulnerabilities in dependencies
-- Unused dependencies
-- Unmaintained packages
+- Threat-model trust boundaries, abuse cases, rate limits, high-risk workflows, and failure recovery.
+- Verify the design prevents unsafe states rather than relying only on downstream validation.
 
 ### A07: Authentication Failures
 
-**Checks:**
-```bash
-# Check password hashing
-grep -r "bcrypt\|argon2\|scrypt" src/
+- Review credential handling, MFA where risk warrants it, reset/recovery flows, session rotation, expiry, and brute-force defenses.
 
-# Check password requirements
-grep -r "password.*length\|password.*complex" src/
+### A08: Software or Data Integrity Failures
 
-# Check for password in URL
-grep -r "password.*req\." src/
-```
+- Verify signatures, trusted update channels, deserialization boundaries, artifact integrity, and protection from unauthorized data changes.
 
-**Common Issues:**
-- Weak password hashing
-- No password complexity requirements
-- Password in URL
-- Session fixation
+### A09: Security Logging and Alerting Failures
 
-### A08: Software/Data Integrity
+- Check that security-relevant events are logged without secrets, protected from tampering, monitored, and connected to actionable alerts.
 
-**Checks:**
-```bash
-# Check for subresource integrity
-grep -r "integrity\|crossorigin" src/
+### A10: Mishandling of Exceptional Conditions
 
-# Check for signature verification
-grep -r "verify.*signature\|validate.*token" src/
-```
-
-**Common Issues:**
-- No integrity checks
-- Unsigned updates
-- Unverified dependencies
-
-### A09: Logging Failures
-
-**Checks:**
-```bash
-# Check for sensitive data in logs
-grep -r "log.*password\|log.*token\|log.*secret" src/
-
-# Check for audit trail
-grep -r "audit\|activity.*log" src/
-```
-
-**Common Issues:**
-- Sensitive data in logs
-- No audit trail for critical operations
-- Logs not protected
-- No log tampering detection
-
-### A10: SSRF (Server-Side Request Forgery)
-
-**Checks:**
-```bash
-# Check for arbitrary URL fetching
-grep -r "fetch(\|axios(\|request(\|http\\.get" src/
-
-# Check for webhook URLs
-grep -r "webhook.*url\|callback.*url" src/
-```
-
-**Common Issues:**
-- No URL validation
-- Fetching user-supplied URLs
-- No allowlist for external calls
+- Exercise malformed input, resource exhaustion, timeouts, partial failures, concurrency, and dependency outages.
+- Look for fail-open behavior, swallowed errors, unsafe retries, inconsistent state, and missing rollback or reconciliation.
 
 ## Security Audit Checklist
 
@@ -250,12 +108,12 @@ grep -r "webhook.*url\|callback.*url" src/
 
 Run security audit:
 ```bash
-python scripts/security_audit.py
+python3 scripts/security_audit.py --name <service-name> --output security-audit.md
 ```
 
 Check for secrets:
 ```bash
-python scripts/find_secrets.py
+python3 scripts/find_secrets.py .
 ```
 
 ## References

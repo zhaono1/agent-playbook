@@ -43,7 +43,7 @@ Further reading:
 
 ### Method 0: One-Command Installer (PNPM/NPM)
 
-Sets up skills for Claude Code, Codex, Gemini, and DeepSeek Harness. It wires session logging and privacy-safe failure capture for Claude Code, records an `agent_playbook` metadata block for Codex, and prepares the other hosts' skill directories.
+Sets up skills for Claude Code, Codex, Gemini, and DeepSeek Harness. It wires bounded, redacted private session summaries and failure capture for Claude Code, records an `agent_playbook` metadata block for Codex, and prepares the other hosts' skill directories.
 
 ```bash
 pnpm dlx @codeharbor/agent-playbook init
@@ -136,13 +136,14 @@ apb skills add ./skills/my-skill --scope project --target deepseek
 
 ## Validated Self-Improvement
 
-Capture a reusable correction, inspect candidates, and promote only after a
-representative check:
+Capture a reusable correction, validate it with representative evidence, and
+record application only after one durable owner actually changes:
 
 ```bash
 apb self-improve capture --kind correction --summary "Verify the current source before using cached state" --evidence "focused-test"
 apb self-improve list
-apb self-improve review cand-... --decision promote --reason "regression test passes" --validated
+apb self-improve review cand-... --decision validate --reason "regression test passes" --validation-method focused-test --validation-evidence "test:self-improvement"
+apb self-improve review cand-... --decision apply --reason "installed in owner" --owner "skill:self-improving-agent" --change-ref "commit:abc123"
 ```
 
 Export the reviewed notebook to Obsidian or another local Markdown system:
@@ -163,7 +164,8 @@ tool input or output. See [Self-Improvement Example](./docs/self-improvement-exa
 | Gemini | Yes | No hook wiring yet | Skill distribution only |
 | DeepSeek Harness | Yes | No hook wiring yet | Skill distribution only |
 
-The MCP server is a separate optional integration and is currently documented for Claude Code.
+The MCP server is a separate optional integration. Claude Code is the setup
+example, while the stdio tool contract is usable by any compatible MCP client.
 
 ## Project Structure
 
@@ -187,7 +189,7 @@ agent-playbook/
 | **[session-logger](./skills/session-logger/)** | Saves conversation history to session log files | Host-supported hook |
 | **[auto-trigger](./skills/auto-trigger/)** | Documents follow-up hook metadata between skills | Config only |
 | **[workflow-orchestrator](./skills/workflow-orchestrator/)** | Coordinates multi-skill workflows and records supported follow-ups | Manual / host-supported hook |
-| **[self-improving-agent](./skills/self-improving-agent/)** | Captures privacy-safe candidates and promotes only validated rules | Failure hook / manual review |
+| **[self-improving-agent](./skills/self-improving-agent/)** | Captures bounded redacted candidates and separates validation from application | Failure hook / manual review |
 
 ### Core Development
 
@@ -243,7 +245,7 @@ before taking external actions such as PR creation.
 │  prd-planner │ completes
 └──────┬───────┘
        │
-       ├──→ self-improving-agent (background) → writes learning proposal
+       ├──→ self-improving-agent (declared background follow-up; host-dependent)
        │         └──→ create-pr (ask first) ──→ session-logger (if supported)
        │
        └──→ session-logger (if supported)
@@ -259,10 +261,11 @@ before taking external actions such as PR creation.
 
 ## Usage
 
-Once installed, skills are automatically available in any Claude Code session. You can invoke them by:
+Once installed, supported hosts can discover the skills according to their own
+runtime rules. Explicit invocation is the portable behavior:
 
-1. **Direct activation** - The skill activates based on context (e.g., mentioning "PRD", "planning")
-2. **Manual invocation** - Explicitly ask Claude to use a specific skill
+1. **Host discovery** - A host may select a skill from its description and context
+2. **Explicit invocation** - Ask the current agent to use a specific skill
 
 Example:
 
@@ -270,7 +273,7 @@ Example:
 You: Create a PRD for a new authentication feature
 ```
 
-The `prd-planner` skill will activate automatically.
+Use `prd-planner` for this request. Automatic activation is host-dependent.
 
 ## Workflow Example
 
@@ -281,15 +284,17 @@ User: "Create a PRD for user authentication"
        ↓
 prd-planner executes
        ↓
-Phase complete → follow-ups:
-       ├──→ self-improving-agent (background) - writes proposal
+Phase complete → declared follow-up intent (host-dependent):
+       ├──→ self-improving-agent (background) - may write a proposal
        └──→ session-logger (if supported) - saves session
        ↓
 User: "Implement this PRD"
        ↓
 prd-implementation-precheck → implementation
        ↓
-code-reviewer → self-improving-agent → create-pr
+code-reviewer → optional learning candidate
+       ↓
+create-pr (only when the user requested submission)
 ```
 
 ## AI Agent Learning Path

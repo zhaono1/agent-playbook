@@ -57,27 +57,28 @@ Deliver a Node-based CLI distributed via NPM/PNPM (`@codeharbor/agent-playbook`)
 - Merge into `~/.claude/settings.json` or `.claude/settings.json`.
 - Add hook entries for:
   - `SessionEnd`: run local CLI path with `session-log` and `transcript_path` from stdin.
-  - `PostToolUse`: run local CLI path with `self-improve` (MVP: record metadata only).
+  - `PostToolUseFailure`: run local CLI path with `self-improve` to capture a bounded candidate.
 - Install a local CLI copy under `.claude/agent-playbook/` to keep hook commands stable without relying on global PATH.
 - Ensure hooks are merged without overwriting user-defined hooks.
 
 ### Codex Config
 - Read and update `~/.codex/config.toml`.
 - Optional: add `[[skills.config]]` to disable/enable default skills.
-- Do not overwrite user settings; only append/update relevant blocks.
+- Do not overwrite user settings; manage only the explicit Agent Playbook marker block.
 
 ### Session Logging
-- Parse `transcript_path` JSONL, extract summary, decisions, files, and commands.
-- Write to `sessions/YYYY-MM-DD-{topic}.md` using the existing template.
-- Support `--session-dir` for global vs repo logs.
+- Parse `transcript_path` JSONL and extract bounded redacted prompts, files, commands, and questions.
+- Default to `~/.agent-playbook/sessions/<project-id>/YYYY-MM-DD-{topic}.md`.
+- Write inside a repository only when the user explicitly supplies `--session-dir`.
 
-### Self-Improvement MVP
-- On PostToolUse/SessionEnd:
-  - Append a bounded metadata entry into `~/.claude/memory/episodic/`.
-  - Update working-memory state under `~/.claude/memory/working/`.
-- Optional future enhancement: LLM summarization and pattern extraction.
+### Self-Improvement Lifecycle
+- On `PostToolUseFailure`, write a bounded event and deduplicated candidate under
+  `~/.agent-playbook/self-improvement/`.
+- Require structured evidence before validation and a named owner/change reference
+  before application.
+- Treat `active-rules.json` as a derived projection of applied candidates.
 
 ## Migration Plan
-- If existing links/configs are detected, do a no-op unless `--repair` is used.
+- Preserve verified ownership across repeated init and repair operations.
 - Back up any config file before modification.
-- Provide `uninstall` to remove links and restore backups.
+- Provide `uninstall` to remove only resources whose ownership still verifies.

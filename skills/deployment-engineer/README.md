@@ -1,6 +1,6 @@
 # Deployment Engineer
 
-> A Claude Code skill for CI/CD pipelines and deployment automation.
+> A portable agent skill for CI/CD pipelines and deployment automation.
 
 ## Installation
 
@@ -26,12 +26,12 @@ You: Configure GitHub Actions
 
 Generate deployment config:
 ```bash
-python scripts/generate_deploy.py <environment>
+python3 scripts/generate_deploy.py --env <environment> --name <service-name> --output deploy-plan.md
 ```
 
 Validate deployment:
 ```bash
-python scripts/validate_deploy.py
+python3 scripts/validate_deploy.py --input deploy-plan.md
 ```
 
 ## Resources

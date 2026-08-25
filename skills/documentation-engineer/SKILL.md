@@ -155,12 +155,12 @@ if (user.role === 'admin') {
 
 Generate documentation structure:
 ```bash
-python scripts/generate_docs.py
+python3 scripts/generate_docs.py --name <service-name> --output docs/README.md
 ```
 
 Validate documentation:
 ```bash
-python scripts/validate_docs.py
+python3 scripts/validate_docs.py --input docs/README.md
 ```
 
 ## References

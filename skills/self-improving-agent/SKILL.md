@@ -1,6 +1,6 @@
 ---
 name: self-improving-agent
-description: Use after a failure, user correction, repeated workflow problem, or validated success reveals a reusable lesson. Captures privacy-safe candidates, tests them, and promotes only validated rules into durable guidance.
+description: Use after a failure, user correction, repeated workflow problem, or validated success reveals a reusable lesson. Captures bounded redacted candidates and separates validation from application in durable guidance.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
@@ -25,12 +25,14 @@ ideas without evidence, or project facts that belong in project documentation.
 Every run ends in exactly one state:
 
 1. `candidate`: reusable but not yet validated.
-2. `promoted`: validated and installed in the narrowest durable owner.
-3. `rejected`: disproved, unsafe, too specific, or obsolete.
-4. `no-delta`: no reusable behavior change was found.
-5. `open-question`: evidence is insufficient and the missing proof is named.
+2. `validated`: representative evidence supports the lesson, but no owner change is claimed yet.
+3. `applied`: the validated lesson was installed in one named durable owner with a change reference.
+4. `rejected`: disproved, unsafe, too specific, or obsolete.
+5. `superseded` or `rolled_back`: an applied/validated lesson was replaced or reverted.
+6. `no-delta`: no reusable behavior change was found.
+7. `open-question`: evidence is insufficient and the missing proof is named.
 
-An artifact is not proof of improvement. A promoted lesson must change future
+An artifact is not proof of improvement. An applied lesson must change future
 behavior and have a representative check that demonstrates the change.
 
 ## Start Packet
@@ -44,7 +46,7 @@ Before editing durable guidance, state:
 - Write boundary: files allowed to change and information that must remain local.
 - Proof: the command, eval, or review that confirms the new behavior.
 
-If any item is unknown, capture a candidate and stop before promotion.
+If any item is unknown, capture a candidate and stop before validation or application.
 
 ## Lifecycle
 
@@ -99,15 +101,26 @@ Choose the smallest proof that can falsify the candidate:
 Separate facts, hypotheses, and missing evidence. Structural validation alone
 does not prove that guidance is semantically current or executable by the host.
 
-### 4. Promote or Reject
+### 4. Validate, Apply, or Reject
 
-Promotion is explicit and requires both a reason and `--validated`:
+Validation records structured proof but does not claim runtime behavior changed:
 
 ```bash
 apb self-improve review cand-123 \
-  --decision promote \
+  --decision validate \
   --reason "confirmed by the representative regression test" \
-  --validated
+  --validation-method focused-test \
+  --validation-evidence "test:self-improvement-regression"
+```
+
+After changing exactly one durable owner, record the application separately:
+
+```bash
+apb self-improve review cand-123 \
+  --decision apply \
+  --reason "installed after the focused test passed" \
+  --owner "skill:self-improving-agent" \
+  --change-ref "commit:abc123"
 ```
 
 Other decisions:
@@ -117,7 +130,7 @@ apb self-improve review cand-123 --decision observe --reason "needs a second epi
 apb self-improve review cand-123 --decision reject --reason "project-specific exception"
 ```
 
-Promote into the narrowest owner:
+Apply into the narrowest owner:
 
 1. Executable test, script, or validator when behavior can be enforced.
 2. The owning skill or its reference when agent judgment is required.
@@ -129,7 +142,7 @@ actions as a side effect of capture.
 
 ### 5. Prove the Loop
 
-Run the representative task after promotion. Report:
+Run the representative task after application. Report:
 
 - candidate id and final state;
 - evidence used and what remains uncertain;
@@ -141,7 +154,7 @@ If the new rule does not change the representative behavior, revert or reject it
 
 ## Knowledge Export
 
-Export active rules and open candidates as Markdown for Obsidian or another
+Export applied rules and open candidates as Markdown for Obsidian or another
 local knowledge system:
 
 ```bash
@@ -170,6 +183,6 @@ See `references/learning-lifecycle.md` for schemas and adapter contracts. Use
 - [ ] Candidate/no-delta decision is explicit.
 - [ ] Stored text is minimal, redacted, and portable.
 - [ ] Current authoritative sources were checked when relevant.
-- [ ] Promotion has explicit validation and one durable owner.
-- [ ] Representative behavior was tested after promotion.
+- [ ] Validation evidence is structured and application names one durable owner.
+- [ ] Representative behavior was tested after application.
 - [ ] No private project detail entered public skill assets.

@@ -20,11 +20,11 @@ pnpm dlx @codeharbor/agent-playbook init --project
 ## What It Does
 
 - Installs skills to Claude Code, Codex, Gemini, and DeepSeek Harness directories.
-- Installs Claude Code hooks for session logs and privacy-safe failure capture.
+- Installs Claude Code hooks for bounded, redacted private session summaries and failure capture.
 - Manages skill lifecycle through `apb skills ...`.
 - Captures deduplicated learning candidates without raw tool payloads.
-- Requires explicit validation before promoting a candidate to an active rule.
-- Exports active rules and open candidates as Markdown for Obsidian or other local notebooks.
+- Requires structured evidence before validation and an owner/change reference before application.
+- Exports applied rules and open candidates as Markdown for Obsidian or other local notebooks.
 
 ## Platform Support
 
@@ -43,7 +43,7 @@ agent-playbook status|doctor|repair|uninstall
 agent-playbook session-log [--session-dir <path>]
 agent-playbook self-improve [capture] [--kind <kind>] [--summary <text>]
 agent-playbook self-improve list [--status <status>] [--format json]
-agent-playbook self-improve review <id> --decision <promote|observe|reject> --reason <text> [--validated]
+agent-playbook self-improve review <id> --decision <validate|apply|observe|reject|supersede|rollback> --reason <text>
 agent-playbook self-improve export --output <markdown-file>
 agent-playbook skills [list|info|add|remove|enable|disable|doctor|sync|upgrade|export|import]
 ```
@@ -61,14 +61,28 @@ apb self-improve capture \
   --summary "Verify the current source before relying on cached state" \
   --evidence "focused-test"
 
+apb self-improve review cand-... \
+  --decision validate \
+  --reason "representative regression passes" \
+  --validation-method focused-test \
+  --validation-evidence "test:self-improvement"
+
+apb self-improve review cand-... \
+  --decision apply \
+  --reason "durable owner changed and regression reran" \
+  --owner "skill:self-improving-agent" \
+  --change-ref "commit:abc123"
+
 apb self-improve export --output /path/to/vault/Agent/Learning.md
 ```
 
 ## Local State and Privacy
 
-Learning state defaults to `~/.agent-playbook/self-improvement/`. Automatic
-capture listens only to failed Claude Code tool events, redacts common secret
-forms, and excludes raw prompts, transcripts, tool inputs, and tool outputs.
+Learning state defaults to `~/.agent-playbook/self-improvement/`; session
+summaries default to `~/.agent-playbook/sessions/<project-id>/`. Automatic
+failure capture excludes raw prompts, transcripts, tool inputs, and tool
+outputs. Session summaries store bounded redacted extracts and never default to
+the current repository.
 
 Override paths for testing or managed environments:
 

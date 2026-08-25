@@ -1,14 +1,14 @@
 ---
 name: figma-designer
-description: Analyzes Figma designs and generates implementation-ready PRDs with detailed visual specifications. Use when user provides Figma link or uploads design screenshots. Requires Figma MCP server connection.
+description: Analyzes Figma designs into implementation-ready visual evidence, tokens, component specifications, and interaction states for handoff to planning or development.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch, WebSearch, AskUserQuestion
 metadata:
   hooks:
     after_complete:
       - trigger: prd-planner
         mode: ask_first
-        condition: prd_generated
-        reason: "Further refine PRD with 4-file pattern"
+        condition: product_requirements_requested
+        reason: "Turn design evidence into product and technical requirements"
       - trigger: self-improving-agent
         mode: background
         reason: "Learn design patterns for future reference"
@@ -23,7 +23,9 @@ metadata:
 
 ## Overview
 
-This skill analyzes Figma designs through the Figma MCP server and generates detailed PRDs with precise visual specifications. It extracts design tokens, component specifications, and layout information that developers can implement directly.
+This skill analyzes Figma designs through the available Figma integration and
+produces design evidence. `prd-planner` owns product requirements and technical
+PRD methodology; this skill supplies visual facts and unresolved design gaps.
 
 ## Prerequisites
 
@@ -249,34 +251,18 @@ variant.tertiary = {
 
 ## Output Formats
 
-### Option 1: Full PRD (Recommended)
-
-Generates a complete 4-file PRD:
-- `docs/{feature}-notes.md` - Design decisions
-- `docs/{feature}-task-plan.md` - Implementation tasks
-- `docs/{feature}-prd.md` - Product requirements
-- `docs/{feature}-tech.md` - Technical specifications
-
-### Option 2: Visual Spec Document
+### Option 1: Visual Spec Document (Default)
 
 Generates a design specification document:
 ```
 docs/{feature}-design-spec.md
 ```
 
-### Option 3: Component Library
+### Option 2: PRD Evidence Pack
 
-For design systems, generates:
-```
-src/components/
-├── Button/
-│   ├── Button.tsx
-│   ├── Button.test.tsx
-│   └── Button.stories.tsx
-├── Input/
-├── Card/
-└── tokens.ts
-```
+Provide screen intent, design tokens, component states, responsive rules,
+accessibility observations, and open product questions as inputs to
+`prd-planner`. Do not invent business requirements from visual design alone.
 
 ## Quick Reference: Design Token Categories
 
@@ -294,7 +280,7 @@ src/components/
 
 ## Design Review Checklist
 
-Before generating PRD, verify:
+Before generating design evidence, verify:
 
 - [ ] All screens are accounted for
 - [ ] Design tokens are extracted

@@ -6,7 +6,7 @@ skills—not as another general-purpose agent runtime.
 ## Product Boundary
 
 ```text
-portable skills + evals
+portable skills + executable tests + eval specifications
           ↓
 local lifecycle core (install, capture, review, export)
           ↓
@@ -25,7 +25,7 @@ An Obsidian vault is a local directory of Markdown files, so the safe integratio
 is file-based and does not require storing private vault details in a skill.
 
 1. Keep candidate state outside the vault.
-1. Promote only validated rules.
+1. Apply only validated candidates after a named durable owner changes.
 1. Export a stable notebook file into the vault:
 
 ```bash
@@ -71,10 +71,10 @@ References:
 
 ## Productization Plan
 
-### v0.4 — Trustworthy Local Core
+### v0.4.1 — Hardened Local Core
 
-- Privacy-safe failure capture and candidate deduplication
-- Explicit validation and promotion lifecycle
+- Redacted, bounded failure capture and candidate deduplication
+- Explicit validation and application lifecycle
 - Obsidian-compatible Markdown export
 - DeepSeek Harness skill distribution
 - Representative CLI tests and skill eval cases
@@ -82,12 +82,27 @@ References:
 Success means a user can reproduce the entire loop locally without granting a
 cloud service transcript access.
 
+### v0.4.2 — Modular Core and Conformance
+
+- Split the remaining CLI command groups into independently tested modules for
+  self-improvement, skill state, host adapters, and lifecycle commands
+- Add a host-backed runner for the human-scored scenario eval specifications
+- Add Windows hook-command conformance fixtures instead of inferring support
+  from installer-only tests
+- Add projection rebuild/repair commands and fault-injection tests around the
+  append event, candidate store, and derived active-rule files
+- Add an idempotent Obsidian export/scheduler recipe with dry-run and lock
+  behavior documented
+
+Success means a host adapter can prove the same lifecycle contract without
+reaching into the CLI monolith or inventing its own policy.
+
 ### v0.5 — Thin Host Adapters
 
 - Publish a versioned DeepSeek Harness bundle/profile
 - Add documented Codex and Gemini event adapters only where host APIs support them
-- Add schema migration and import/export compatibility tests
-- Add an idempotent scheduler recipe for knowledge exports
+- Publish conformance fixtures for adapter event envelopes and capability discovery
+- Add import/export compatibility tests across supported release lines
 
 Success means adapters share the same conformance fixtures and never implement
 their own learning policy.
@@ -99,8 +114,8 @@ their own learning policy.
 - Opt-in aggregate metrics that exclude prompts, paths, and content
 - Release channels, rollback, and upgrade/migration documentation
 
-Success means teams can audit what was learned, why it was promoted, which host
-uses it, and how to roll it back.
+Success means teams can audit what was learned, how it was validated, where it
+was applied, which host uses it, and how to supersede or roll it back.
 
 ## Non-Goals
 

@@ -1,6 +1,6 @@
 # API Designer
 
-> A Claude Code skill for REST and GraphQL API design.
+> A portable agent skill for REST and GraphQL API design.
 
 ## Installation
 
@@ -26,7 +26,7 @@ You: Review this API design
 
 Generate API scaffold:
 ```bash
-python scripts/generate_api.py <resource-name>
+python3 scripts/generate_api.py --name <resource-name> --output api-design.md
 ```
 
 ## Resources

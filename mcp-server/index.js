@@ -16,18 +16,18 @@ const CATALOG_PATH = path.join(SKILLS_DIR, "catalog.json");
 const SKILL_FILE_NAME = "SKILL.md";
 const DEFAULT_CATEGORY = "other";
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SERVER_VERSION = "0.4.1";
 const CATEGORY_MAP = loadSkillCatalog();
 const CATEGORY_NAMES = Object.keys(CATEGORY_MAP);
 
 const server = new Server(
   {
     name: "agent-playbook-server",
-    version: "1.0.0",
+    version: SERVER_VERSION,
   },
   {
     capabilities: {
       tools: {},
-      resources: {},
     },
   }
 );
@@ -83,7 +83,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "get_skill_hooks",
-      description: "Get the hook configuration for a skill",
+      description: "Get declarative hook metadata for a skill; execution is host-dependent",
       inputSchema: {
         type: "object",
         properties: {
@@ -262,7 +262,6 @@ async function listSkills(category, options = {}) {
       name: skill.frontMatter.name || entry.name,
       description: skill.frontMatter.description || "",
       category: skillCategory,
-      path: skill.skillPath,
       allowed_tools: getAllowedTools(skill.frontMatter),
     });
   }
@@ -353,6 +352,7 @@ export {
   CATALOG_PATH,
   CATEGORY_MAP,
   CATEGORY_NAMES,
+  SERVER_VERSION,
   SKILLS_DIR,
   extractFrontMatter,
   getSkill,

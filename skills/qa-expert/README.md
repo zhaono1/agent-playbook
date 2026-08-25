@@ -1,6 +1,6 @@
 # QA Expert
 
-> A Claude Code skill for quality assurance strategy and quality gates.
+> A portable agent skill for quality assurance strategy and quality gates.
 
 ## Installation
 
@@ -28,7 +28,7 @@ You: What tests should I write?
 
 Generate test plan:
 ```bash
-python scripts/generate_test_plan.py <feature>
+python3 scripts/generate_test_plan.py --name <feature> --output docs/test-plan.md
 ```
 
 ## Resources

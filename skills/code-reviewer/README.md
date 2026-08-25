@@ -1,6 +1,6 @@
 # Code Reviewer
 
-> A Claude Code skill for comprehensive code review of pull requests and code changes.
+> A portable agent skill for comprehensive code review of pull requests and code changes.
 
 ## Installation
 
@@ -49,7 +49,7 @@ Reviews are structured with severity levels:
 Generate a review checklist:
 
 ```bash
-python scripts/review_checklist.py
+python3 scripts/review_checklist.py --base main --output review-checklist.md
 ```
 
 ## References

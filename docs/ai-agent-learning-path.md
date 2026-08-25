@@ -207,9 +207,11 @@ PRD 创建工作流:
           ↓
 代表性任务 + 可证伪检查
           ↓
-promote / observe / reject
+validate / observe / reject
           ↓
-最窄的 durable owner + 回归验证
+apply 到最窄的 durable owner
+          ↓
+回归验证 / supersede / rollback
 ```
 
 ### 状态与责任
@@ -218,9 +220,10 @@ promote / observe / reject
 |------|------|----------------------|
 | `candidate` | 有复用价值但证据不足 | 否 |
 | `observe` | 继续收集独立证据 | 否 |
-| `promoted` | 已验证并写入唯一责任源 | 是 |
+| `validated` | 已通过可审计的代表性验证 | 否 |
+| `applied` | 已写入唯一责任源并记录变更引用 | 是 |
 | `rejected` | 被证伪、不安全或过于具体 | 否 |
-| `no-delta` | 本次没有可复用变化 | 否 |
+| `superseded` / `rolled_back` | 已被替代或回滚 | 否 |
 
 ### 实现示例
 
@@ -233,13 +236,24 @@ apb self-improve capture \
 apb self-improve list
 ```
 
-此时只产生候选，不修改 skill。验证完成后再显式提升：
+此时只产生候选，不修改 skill。先记录验证方法和证据：
 
 ```bash
 apb self-improve review cand-... \
-  --decision promote \
+  --decision validate \
   --reason "代表性回归测试通过" \
-  --validated
+  --validation-method regression-test \
+  --validation-evidence "test/self-improvement.test.js"
+```
+
+只有把变化写进最窄的 durable owner 后，才显式标记为 applied：
+
+```bash
+apb self-improve review cand-... \
+  --decision apply \
+  --reason "规则已写入唯一责任源并完成回测" \
+  --owner "skills/example/SKILL.md" \
+  --change-ref "commit-or-pr-reference"
 ```
 
 真正的衡量标准不是“写了多少 memory”，而是代表性任务是否稳定改善、

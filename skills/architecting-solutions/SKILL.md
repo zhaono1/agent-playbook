@@ -82,13 +82,13 @@ Ask these questions to understand the problem:
 
 ```bash
 # Find similar patterns in the codebase
-grep -r "related_keyword" packages/ --include="*.ts" --include="*.tsx"
+grep -r "related_keyword" src/ --include="*.ts" --include="*.tsx"
 
 # Find relevant directory structures
-find packages/ -type d -name "*keyword*"
+find . -type d -name "*keyword*"
 
 # Check existing patterns
-ls -la packages/kit/src/views/similar-feature/
+find src -maxdepth 4 -type d -name '*similar*'
 ```
 
 **Critical for Refactoring:**
@@ -99,8 +99,8 @@ ls -la packages/kit/src/views/similar-feature/
 
 ```bash
 # Find all imports/usages of a module
-grep -r "useFeatureContext" packages/ --include="*.ts" --include="*.tsx"
-grep -r "refreshSignalRef" packages/ --include="*.ts" --include="*.tsx"
+grep -r "existing-interface" src/ --include="*.ts" --include="*.tsx"
+grep -r "related-event" src/ --include="*.ts" --include="*.tsx"
 ```
 
 **CRITICAL: Before proposing a refactoring, ask:**
@@ -111,7 +111,7 @@ grep -r "refreshSignalRef" packages/ --include="*.ts" --include="*.tsx"
 
 Look for:
 - **Architectural patterns**: How are similar features implemented?
-- **State management**: What state solution is used? (Jotai, Redux, Context, Refs)
+- **State management**: What solution and ownership boundaries does this repository already use?
 - **Component patterns**: How are components organized?
 - **API patterns**: How are API calls structured?
 - **Type definitions**: Where are types defined?
@@ -222,20 +222,18 @@ Before finalizing:
 
 ## Root Cause Analysis Checklist (CRITICAL)
 
-For bugs and refresh issues, ALWAYS verify:
+For bugs, state, refresh, or lifecycle issues, verify:
 
-- [ ] **Existing mechanism already exists** - Does a working solution exist elsewhere?
-- [ ] **Why existing solution doesn't work** - Timing? Scope? Not connected?
-- [ ] **Each hook/component instance is independent** - They don't share state unless explicitly connected
-- [ ] **Callback chain is complete** - Trace from trigger to effect, every link must work
-- [ ] **Empty callbacks are called** - If `onRefresh` is provided, is it actually implemented?
-- [ ] **Polling/refresh timing** - What are the intervals? When do they fire?
+- [ ] **Existing mechanism** - Does a working solution already exist elsewhere?
+- [ ] **Causal gap** - Why does the existing solution not apply here: timing, scope, ownership, or missing wiring?
+- [ ] **State ownership** - Which instance or service owns each state transition?
+- [ ] **Complete event chain** - Trace trigger → handler → state change → observable effect.
+- [ ] **Implemented boundaries** - Confirm each callback, adapter, queue, or registration point performs real work.
+- [ ] **Timing semantics** - Identify intervals, retries, focus/lifecycle events, and cancellation behavior.
 
-**Common Root Cause Mistakes**:
-- Assuming hooks share state (they don't - each instance is independent)
-- Empty callback implementations that do nothing
-- Not tracing the full call chain from trigger to effect
-- Not understanding when events fire (e.g., `revalidateOnFocus` requires actual focus change)
+Common mistakes include assuming separate instances share state, leaving inert
+callbacks, checking only the first link in a chain, and confusing an event's
+registration with proof that it fired.
 
 ---
 
@@ -246,14 +244,14 @@ For bugs and refresh issues, ALWAYS verify:
   - What's the migration strategy for each? (direct move / transform / deprecate)
 
 - [ ] **ALL consumers are identified**: Find every file that uses the code being changed
+
   ```bash
-  # Must run: grep -r "import.*ModuleName" packages/
-  # Must run: grep -r "useHookName" packages/
+  rg -n "ModuleName|PublicInterfaceName" .
   ```
 
-- [ ] **Provider usage points are covered**: Every file using the Provider is updated
-  - Root Provider → Mirror Provider migration
-  - All pages/components using the provider
+- [ ] **Dependency usage points are covered**: Every consumer of the changed interface is identified
+  - Primary runtime composition
+  - Secondary contexts such as overlays, workers, jobs, or tests when present
 
 ## State/Data Flow Validation
 
@@ -263,30 +261,25 @@ For bugs and refresh issues, ALWAYS verify:
 - [ ] **Complete call chain documented**: From trigger → callback → effect, show every step
 - [ ] **All related operations covered**: If module has Create/Edit/Delete/Import/Export, test all of them
 
-## React/Hook Rules Compliance
+## Framework Invariants (When Applicable)
 
-- [ ] **No conditional hooks**: Never call hooks conditionally (e.g., `isAdvancedMode ? useHook() : null`)
-  - Hooks MUST be called at the top level, unconditionally
-  - If conditional logic is needed, use early return or conditional rendering
+- [ ] **Lifecycle rules hold**: Check the actual framework's ordering, registration, and teardown requirements.
+- [ ] **Reference semantics hold**: Verify mutable handles, value snapshots, and dependency lifetimes according to the repository's framework.
+- [ ] **Conditional behavior is legal**: Do not conditionally register primitives when the framework requires stable ordering.
 
-- [ ] **Ref usage is correct**: If using ref pattern, access via `.current`
-  - Check: `useFeatureActions().current` not `useFeatureActions()`
+## Dependency Composition Completeness
 
-## Provider Pattern Completeness
+- [ ] **Composition owner is defined**: The repository's actual dependency owner is identified
+- [ ] **Secondary contexts are covered**: Modals, overlays, workers, tests, or parallel runtimes are checked when relevant
+- [ ] **All usage points are wired**: Every consumer receives the required dependency
+- [ ] **Runtime registration is proven**: The relevant provider, container, registry, or adapter is present in every required context.
 
-- [ ] **Root Provider is defined**: Main Provider component exists
-- [ ] **Mirror Provider is defined**: Mirror Provider for modal/overlay contexts exists
-- [ ] **All usage points wrapped**: Every page/component using the provider is wrapped
-  ```bash
-  # Must verify: Each page that uses the context has the Provider wrapper
-  ```
+## Framework/System Integration
 
-## Auto-mount/System Integration
-
-- [ ] **Enum registration**: Added to appropriate enum (e.g., `EContextStoreNames`)
-- [ ] **Switch case registration**: Added to auto-mount switch statement
-- [ ] **Store initialization**: Store initialization logic is complete
+- [ ] **Registration points**: Required registries, routes, dependency containers, or plugin manifests are updated
+- [ ] **Initialization**: Startup and teardown follow the repository's existing lifecycle
 - [ ] **No duplicate registrations**: Verify no conflicts with existing entries
+- [ ] **Applicability**: Skip framework-specific checks when the repository does not use that mechanism
 
 ## Backward Compatibility
 
@@ -319,10 +312,9 @@ For bugs and refresh issues, ALWAYS verify:
 
 ## The Problem with Jumping to Complex Solutions
 
-**Real Case Study:**
-- **Initial solution proposed**: Full shared state-store migration (10+ files, 2-3 days)
-- **Actual Solution**: Hook into existing pending request count decrease (1-2 files, 1 hour)
-- **Lesson**: Always look for the simplest solution first
+**Illustrative lesson:** A request to refresh after an operation completes may
+need only an existing completion signal, not a new shared state subsystem. Trace
+the current lifecycle before proposing a broader abstraction.
 
 ## Signs You Might Be Over-Engineering
 

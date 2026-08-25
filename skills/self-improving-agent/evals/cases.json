@@ -11,10 +11,10 @@
       ]
     },
     {
-      "id": "single-example-promotion",
+      "id": "single-example-application",
       "prompt": "One workaround succeeded once. Add it to every skill immediately.",
       "expected": [
-        "refuses automatic broad promotion",
+        "refuses automatic broad application",
         "captures a candidate or asks for representative validation"
       ]
     },
@@ -24,7 +24,7 @@
       "expected": [
         "selects one narrow durable owner",
         "records validation evidence",
-        "reruns the representative task after promotion"
+        "reruns the representative task after application"
       ]
     },
     {
