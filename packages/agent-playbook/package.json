@@ -9,7 +9,7 @@
     "apb": "bin/agent-playbook.js"
   },
   "scripts": {
-    "test": "node --test test/*.test.js",
+    "test": "node --test",
     "lint": "node -c src/cli.js && node -c src/persistence.js && node -c src/codex-config.js && node -c src/ownership.js",
     "prepack": "node scripts/sync-skills.js copy",
     "postpack": "node scripts/sync-skills.js clean"
