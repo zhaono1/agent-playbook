@@ -1,19 +1,24 @@
 # Agent Playbook
 
-> Portable skills, local lifecycle tooling, and workflow patterns for coding agents
+> Local-first Behavior CI for coding agents
 
 English | [简体中文](./README.zh-CN.md)
 
 ## Overview
 
-This repository collects practical, public-facing building blocks for AI agents: reusable skills, prompt patterns, workflow docs, and tooling for Claude Code, Codex, Gemini, and DeepSeek Harness.
+Agent Playbook turns repeated coding-agent corrections into reviewed, executable,
+and reversible behavior changes. Its local CLI provides a Behavior Inbox,
+baseline/candidate Eval Artifacts, durable-owner suggestions, and Behavior Change
+Proposals for Claude Code, Codex, Gemini, and DeepSeek Harness workflows.
 
 Everything in this repository is intended to stay portable and abstract. Private operating details, company-specific workflows, and sensitive business context should live elsewhere.
 
 ## What you get
 
-- Reusable skills with focused `SKILL.md` files and deeper `references/` material
-- Installation and lifecycle tooling through `@codeharbor/agent-playbook`
+- A Behavior Inbox that prioritizes repeated corrections and regressions
+- Executable baseline/candidate evals that gate validation
+- Durable-owner suggestions and local Behavior Change Proposal generation
+- Reusable skills and installation lifecycle tooling through `@codeharbor/agent-playbook`
 - An MCP server for skill discovery
 - Workflow docs for planning, self-improvement, automation, and context design
 
@@ -30,6 +35,7 @@ Further reading:
 
 - [Context Layering for Agent Playbooks](./docs/context-layering-for-agent-playbooks.md)
 - [Skill Ecosystem References](./docs/skill-ecosystem-references.md)
+- [Host Conformance](./docs/host-conformance.md)
 - [Integrations and Product Roadmap](./docs/integrations-and-product-roadmap.md)
 - [long-task-coordinator](./skills/long-task-coordinator/)
 
@@ -38,17 +44,31 @@ Further reading:
 - Builders creating their own reusable agent skills
 - Teams standardizing how agents plan, review, and recover work
 - Power users who want local-first tooling instead of SaaS-heavy orchestration
+- Small AI-native teams that want Agent behavior changes reviewed like code
 
 ## Installation
 
 ### Method 0: One-Command Installer (PNPM/NPM)
 
-Sets up skills for Claude Code, Codex, Gemini, and DeepSeek Harness. It wires bounded, redacted private session summaries and failure capture for Claude Code, records an `agent_playbook` metadata block for Codex, and prepares the other hosts' skill directories.
+Sets up skills for Claude Code, Codex, Gemini, and DeepSeek Harness. Fresh installs leave Claude hooks disabled; pass `--hooks` to explicitly enable bounded, redacted private session summaries and failure capture. The installer records an `agent_playbook` metadata block for Codex and prepares the other hosts' skill directories.
 
 ```bash
 pnpm dlx @codeharbor/agent-playbook init
 # or
 npm exec -- @codeharbor/agent-playbook init
+```
+
+Explicitly enable Claude Code session and failure hooks:
+
+```bash
+pnpm dlx @codeharbor/agent-playbook init --hooks
+```
+
+Inspect the installed local contracts without claiming an unobserved host run:
+
+```bash
+apb conformance
+apb conformance --format json
 ```
 
 Project-only setup:
@@ -141,10 +161,17 @@ record application only after one durable owner actually changes:
 
 ```bash
 apb self-improve capture --kind correction --summary "Verify the current source before using cached state" --evidence "focused-test"
-apb self-improve list
-apb self-improve review cand-... --decision validate --reason "regression test passes" --validation-method focused-test --validation-evidence "test:self-improvement"
-apb self-improve review cand-... --decision apply --reason "installed in owner" --owner "skill:self-improving-agent" --change-ref "commit:abc123"
+apb behavior inbox
+apb behavior owners cand-... --repo .
+apb behavior eval cand-... --artifact behavior-eval.json
+apb behavior review cand-... --decision validate --reason "regression scenarios pass" --eval-result /path/to/eval-result.json
+apb behavior proposal cand-... --owner "skill:self-improving-agent" --output behavior-proposal.md
+apb behavior review cand-... --decision apply --reason "installed in owner" --owner "skill:self-improving-agent" --change-ref "commit:abc123"
 ```
+
+Eval artifacts run explicit command arrays without a shell. Passing results store
+assertion outcomes and hashes, not raw stdout or stderr. See the
+[Eval Artifact contract](./skills/self-improving-agent/references/eval-artifact.md).
 
 Export the reviewed notebook to Obsidian or another local Markdown system:
 
@@ -152,17 +179,22 @@ Export the reviewed notebook to Obsidian or another local Markdown system:
 apb self-improve export --output /path/to/vault/Agent/Learning.md
 ```
 
-Automatic Claude capture observes failed tool events only and never stores raw
-tool input or output. See [Self-Improvement Example](./docs/self-improvement-example.md).
+When explicitly enabled with `apb init --hooks`, automatic Claude capture observes
+failed tool events only and never stores raw tool input or output. See
+[Self-Improvement Example](./docs/self-improvement-example.md).
 
 ## Platform support
 
-| Platform | Skill install | Hooks/config automation | Current status |
-|----------|---------------|-------------------------|----------------|
-| Claude Code | Yes | Installs SessionEnd and PostToolUseFailure hooks | Full |
-| Codex | Yes | Writes `agent_playbook` metadata block to `~/.codex/config.toml` | Partial |
-| Gemini | Yes | No hook wiring yet | Skill distribution only |
-| DeepSeek Harness | Yes | No hook wiring yet | Skill distribution only |
+| Platform | Local distribution | Lifecycle adapter | Runtime proof |
+|----------|--------------------|-------------------|---------------|
+| Claude Code | Skill files | Optional SessionEnd and PostToolUseFailure hooks (`--hooks`) | Unverified until an observed host run |
+| Codex | Skill files plus Agent Playbook's local metadata marker | Not provided | Unverified until an observed host run |
+| Gemini | Skill files | Not provided | Unverified until an observed host run |
+| DeepSeek Harness | Skill files | Not provided | Unverified until an observed host run |
+
+`apb conformance` proves local filesystem and configuration contracts only. See
+[Host Conformance](./docs/host-conformance.md) for the status vocabulary and
+evidence boundary.
 
 The MCP server is a separate optional integration. Claude Code is the setup
 example, while the stdio tool contract is usable by any compatible MCP client.

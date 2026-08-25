@@ -1,21 +1,24 @@
 # Integrations and Product Roadmap
 
-Agent Playbook is most useful as a small local control plane around portable
-skills—not as another general-purpose agent runtime.
+Agent Playbook is a local-first Behavior CI layer for coding agents—not another
+general-purpose agent runtime, memory database, or skill marketplace.
 
 ## Product Boundary
 
 ```text
-portable skills + executable tests + eval specifications
+failure events + explicit user corrections
           ↓
-local lifecycle core (install, capture, review, export)
+Behavior Inbox + durable-owner suggestions
           ↓
-host adapters (Claude, Codex, Gemini, DeepSeek Harness)
+baseline/candidate Eval Artifact + validation gate
           ↓
-knowledge sinks (files, Obsidian, future connectors)
+Behavior Change Proposal + explicit owner application
+          ↓
+host adapters + regression monitoring + knowledge sinks
 ```
 
-The core owns schemas, privacy, candidate state, validation gates, and exports.
+The core owns schemas, privacy, candidate state, executable validation gates,
+owner suggestions, proposals, and exports.
 Adapters translate documented host events into the core contract. Sinks receive
 derived output and never become the only source of truth.
 
@@ -84,11 +87,19 @@ cloud service transcript access.
 
 ### v0.4.2 — Modular Core and Conformance
 
-- Split the remaining CLI command groups into independently tested modules for
-  self-improvement, skill state, host adapters, and lifecycle commands
-- Add a host-backed runner for the human-scored scenario eval specifications
-- Add Windows hook-command conformance fixtures instead of inferring support
-  from installer-only tests
+Implemented in the current development line:
+
+- Host hooks are opt-in for fresh installs and preserve unrelated configuration
+- TOML array tables are preserved and stale state cleanup is project/filter scoped
+- Self-improvement, eval execution, owner resolution, proposal generation, and
+  local host conformance are independently tested modules
+- Baseline/candidate scenarios run as bounded executable argument arrays without a shell
+- Claude hooks use the documented cross-platform command-plus-args form
+- `apb conformance` separates local proof from unsupported or unverified runtime claims
+
+Remaining hardening:
+
+- Split skill state and remaining lifecycle command groups out of the CLI module
 - Add projection rebuild/repair commands and fault-injection tests around the
   append event, candidate store, and derived active-rule files
 - Add an idempotent Obsidian export/scheduler recipe with dry-run and lock
@@ -101,7 +112,8 @@ reaching into the CLI monolith or inventing its own policy.
 
 - Publish a versioned DeepSeek Harness bundle/profile
 - Add documented Codex and Gemini event adapters only where host APIs support them
-- Publish conformance fixtures for adapter event envelopes and capability discovery
+- Publish runtime conformance fixtures for adapter event envelopes, host discovery,
+  and observed invocation
 - Add import/export compatibility tests across supported release lines
 
 Success means adapters share the same conformance fixtures and never implement

@@ -236,14 +236,16 @@ apb self-improve capture \
 apb self-improve list
 ```
 
-此时只产生候选，不修改 skill。先记录验证方法和证据：
+此时只产生候选，不修改 skill。先编写并运行可执行 Eval Artifact，再使用 CLI
+生成的通过结果进行验证：
 
 ```bash
+apb self-improve eval cand-... --artifact behavior-eval.json
+
 apb self-improve review cand-... \
   --decision validate \
   --reason "代表性回归测试通过" \
-  --validation-method regression-test \
-  --validation-evidence "test/self-improvement.test.js"
+  --eval-result /path/to/eval-result.json
 ```
 
 只有把变化写进最窄的 durable owner 后，才显式标记为 applied：

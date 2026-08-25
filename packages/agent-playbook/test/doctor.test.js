@@ -26,10 +26,6 @@ function writeSkill(targetDir, name) {
   );
 }
 
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, "'\\''")}'`;
-}
-
 test("doctor reports healthy when hooks and config are present", () => {
   const tempDir = makeTempDir();
   const claudeDir = path.join(tempDir, "claude");
@@ -115,7 +111,7 @@ test("doctor reports healthy when hooks and config are present", () => {
   assert.match(result.stdout, /Codex config block: yes/);
 });
 
-test("init shell-quotes hook paths and session dir", () => {
+test("init writes cross-platform exec-form hooks without shell quoting", () => {
   const tempDir = makeTempDir();
   const claudeDir = path.join(tempDir, "claude");
   const codexDir = path.join(tempDir, "codex");
@@ -147,7 +143,7 @@ test("init shell-quotes hook paths and session dir", () => {
 
   const result = spawnSync(
     process.execPath,
-    [binPath, "init", "--repo", repoRoot, "--session-dir", sessionDir],
+    [binPath, "init", "--repo", repoRoot, "--hooks", "--session-dir", sessionDir],
     {
       encoding: "utf8",
       env: {
@@ -163,18 +159,28 @@ test("init shell-quotes hook paths and session dir", () => {
   assert.strictEqual(result.status, 0);
 
   const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8"));
-  const sessionCommand = settings.hooks.SessionEnd[0].hooks[0].command;
-  const improveCommand = settings.hooks.PostToolUseFailure[0].hooks[0].command;
+  const sessionHook = settings.hooks.SessionEnd[0].hooks[0];
+  const improveHook = settings.hooks.PostToolUseFailure[0].hooks[0];
   const cliPath = path.join(claudeDir, "agent-playbook", "bin", "agent-playbook.js");
 
-  assert.equal(
-    sessionCommand,
-    `${shellQuote(cliPath)} session-log --hook-source agent-playbook --session-dir ${shellQuote(sessionDir)}`
-  );
-  assert.equal(
-    improveCommand,
-    `${shellQuote(cliPath)} self-improve --hook-source agent-playbook`
-  );
+  assert.equal(sessionHook.command, process.execPath);
+  assert.deepEqual(sessionHook.args, [
+    cliPath,
+    "session-log",
+    "--hook-source",
+    "agent-playbook",
+    "--session-dir",
+    sessionDir,
+  ]);
+  assert.equal(improveHook.command, process.execPath);
+  assert.deepEqual(improveHook.args, [
+    cliPath,
+    "self-improve",
+    "--hook-source",
+    "agent-playbook",
+  ]);
+  assert.ok(!Object.hasOwn(sessionHook, "shell"));
+  assert.ok(!Object.hasOwn(improveHook, "shell"));
   assert.equal((settings.hooks.PostToolUse || []).length, 0);
   assert.ok(
     fs.existsSync(path.join(dshDir, "skills", "self-improving-agent", "SKILL.md"))
@@ -233,7 +239,7 @@ test("doctor reports hook runtime version drift", () => {
   };
 
   assert.strictEqual(
-    spawnSync(process.execPath, [binPath, "init", "--repo", repoRoot], {
+    spawnSync(process.execPath, [binPath, "init", "--repo", repoRoot, "--hooks"], {
       encoding: "utf8",
       env,
     }).status,

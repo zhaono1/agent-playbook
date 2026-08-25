@@ -10,7 +10,7 @@ event -> candidate -> validate -> apply -> supersede | rollback
 - Events are bounded and redacted evidence envelopes, not transcripts.
 - Candidates group identical reusable summaries by fingerprint.
 - Observation adds review evidence without changing active behavior.
-- Validation requires a named method and evidence reference; it does not change active behavior.
+- Validation requires a passing executable eval result for the same candidate; it does not change active behavior.
 - Application requires one durable owner and change reference, then projects one applied rule.
 - Rejection prevents a disproved occurrence from being reused as the same candidate.
 
@@ -22,9 +22,12 @@ Default root: `~/.agent-playbook/self-improvement/`
 self-improvement/
 ├── candidates.json
 ├── active-rules.json
-└── events/
-    └── YYYY-MM/
-        └── evt-*.json
+├── events/
+│   └── YYYY-MM/
+│       └── evt-*.json
+└── evals/
+    └── cand-*/
+        └── eval-*.json
 ```
 
 Event fields are bounded to `kind`, `summary`, `evidence`, `scope`, `source`,
@@ -33,8 +36,9 @@ inputs, and tool outputs are intentionally excluded.
 
 Candidate fields include a hash fingerprint, unique identity, lifecycle state,
 occurrence count, bounded evidence list, validation/application records,
-timestamps, and review history. `active-rules.json` is a generated projection
-of candidates in `applied` state, not a second source of truth.
+timestamps, and review history. Eval results store assertion outcomes and hashes,
+not raw stdout or stderr. `active-rules.json` is a generated projection of
+candidates in `applied` state, not a second source of truth.
 
 Writes use a process lock plus a temporary file and same-directory rename so
 concurrent capture does not lose updates and readers do not observe partial state.
@@ -79,8 +83,10 @@ Before `--decision validate`, answer:
 2. What representative task would fail if it were wrong?
 3. Which single durable owner should change?
 4. Is the rule portable and free of private context?
-5. What command or review provides the validation evidence?
+5. What executable artifact proves the baseline and candidate behavior?
 
-If any answer is missing, use `observe` rather than `validate`. After the owner
+If any answer is missing, use `observe` rather than `validate`. Run the artifact
+with `self-improve eval`, then pass its successful result to `review --decision
+validate --eval-result ...`. After the owner
 actually changes, record `apply --owner ... --change-ref ...`; never infer
 application from validation alone.

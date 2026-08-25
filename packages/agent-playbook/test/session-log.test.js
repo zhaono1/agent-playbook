@@ -245,7 +245,49 @@ test("self-improve separates validation from application and exports lifecycle s
     { encoding: "utf8" }
   );
   assert.strictEqual(unvalidated.status, 1);
-  assert.match(unvalidated.stderr, /validation-method.*validation-evidence/i);
+  assert.match(unvalidated.stderr, /eval-result/i);
+
+  const artifactPath = path.join(tempDir, "behavior-eval.json");
+  fs.writeFileSync(
+    artifactPath,
+    JSON.stringify(
+      {
+        schema_version: "1",
+        candidate_id: candidateId,
+        name: "Verify source behavior",
+        scenarios: [
+          {
+            id: "candidate-behavior",
+            phase: "candidate",
+            command: [process.execPath, "-e", "process.stdout.write('verified')"],
+            expect: { exit_code: 0, stdout_includes: ["verified"] },
+          },
+        ],
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  const evaluated = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "self-improve",
+      "eval",
+      candidateId,
+      "--data-dir",
+      dataDir,
+      "--artifact",
+      artifactPath,
+      "--format",
+      "json",
+    ],
+    { encoding: "utf8" }
+  );
+  assert.strictEqual(evaluated.status, 0, evaluated.stderr);
+  const evalResult = JSON.parse(evaluated.stdout);
+  assert.strictEqual(evalResult.passed, true);
 
   const validated = spawnSync(
     process.execPath,
@@ -260,10 +302,8 @@ test("self-improve separates validation from application and exports lifecycle s
       "validate",
       "--reason",
       "confirmed by a focused test",
-      "--validation-method",
-      "focused-test",
-      "--validation-evidence",
-      "node --test session-log.test.js",
+      "--eval-result",
+      evalResult.result_path,
     ],
     { encoding: "utf8" }
   );
@@ -277,7 +317,40 @@ test("self-improve separates validation from application and exports lifecycle s
     ).stdout
   );
   assert.strictEqual(afterValidation[0].status, "validated");
+  assert.strictEqual(afterValidation[0].validation.method, "executable-eval");
+  assert.strictEqual(afterValidation[0].validation.eval_result.summary.candidate, 1);
   assert.ok(!fs.existsSync(path.join(dataDir, "self-improvement", "active-rules.json")));
+
+  const inbox = spawnSync(
+    process.execPath,
+    [binPath, "behavior", "inbox", "--data-dir", dataDir, "--format", "json"],
+    { encoding: "utf8" }
+  );
+  assert.strictEqual(inbox.status, 0, inbox.stderr);
+  assert.strictEqual(JSON.parse(inbox.stdout)[0].next_action, "create-proposal");
+
+  const proposalPath = path.join(tempDir, "behavior-proposal.md");
+  const proposed = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "behavior",
+      "proposal",
+      candidateId,
+      "--data-dir",
+      dataDir,
+      "--owner",
+      "skill:self-improving-agent",
+      "--output",
+      proposalPath,
+    ],
+    { encoding: "utf8" }
+  );
+  assert.strictEqual(proposed.status, 0, proposed.stderr);
+  const proposal = fs.readFileSync(proposalPath, "utf8");
+  assert.match(proposal, /Behavior Change Proposal/);
+  assert.match(proposal, /skill:self-improving-agent/);
+  assert.match(proposal, /1\/1 scenarios passed/);
 
   const applied = spawnSync(
     process.execPath,
@@ -318,6 +391,101 @@ test("self-improve separates validation from application and exports lifecycle s
   assert.strictEqual(active.items[0].candidate_id, candidateId);
   assert.strictEqual(active.items[0].status, "applied");
   assert.strictEqual(active.items[0].owner, "skill:self-improving-agent");
+});
+
+test("self-improve refuses to validate a failed executable eval", () => {
+  const tempDir = makeTempDir();
+  const dataDir = path.join(tempDir, "data");
+  const capture = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "self-improve",
+      "capture",
+      "--data-dir",
+      dataDir,
+      "--kind",
+      "correction",
+      "--summary",
+      "Do not validate a failing behavior check",
+      "--evidence",
+      "user-correction",
+    ],
+    { encoding: "utf8" }
+  );
+  assert.strictEqual(capture.status, 0, capture.stderr);
+  const candidate = JSON.parse(
+    spawnSync(
+      process.execPath,
+      [binPath, "self-improve", "list", "--data-dir", dataDir, "--format", "json"],
+      { encoding: "utf8" }
+    ).stdout
+  )[0];
+  const artifactPath = path.join(tempDir, "failed-eval.json");
+  fs.writeFileSync(
+    artifactPath,
+    JSON.stringify({
+      schema_version: "1",
+      candidate_id: candidate.id,
+      scenarios: [
+        {
+          id: "candidate-still-fails",
+          phase: "candidate",
+          command: [process.execPath, "-e", "process.stdout.write('actual')"],
+          expect: { exit_code: 0, stdout_includes: ["expected"] },
+        },
+      ],
+    }),
+    "utf8"
+  );
+  const evaluated = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "self-improve",
+      "eval",
+      candidate.id,
+      "--data-dir",
+      dataDir,
+      "--artifact",
+      artifactPath,
+      "--format",
+      "json",
+    ],
+    { encoding: "utf8" }
+  );
+  assert.strictEqual(evaluated.status, 1);
+  const resultPath = JSON.parse(evaluated.stdout).result_path;
+
+  const reviewed = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "self-improve",
+      "review",
+      candidate.id,
+      "--data-dir",
+      dataDir,
+      "--decision",
+      "validate",
+      "--reason",
+      "should be rejected",
+      "--eval-result",
+      resultPath,
+    ],
+    { encoding: "utf8" }
+  );
+
+  assert.strictEqual(reviewed.status, 1);
+  assert.match(reviewed.stderr, /did not pass/);
+  const after = JSON.parse(
+    spawnSync(
+      process.execPath,
+      [binPath, "self-improve", "list", "--data-dir", dataDir, "--format", "json"],
+      { encoding: "utf8" }
+    ).stdout
+  );
+  assert.strictEqual(after[0].status, "candidate");
 });
 
 test("reject then recapture creates a new candidate identity", () => {
@@ -460,10 +628,6 @@ test("invalid self-improvement transitions fail without changing active rules", 
       "validate",
       "--reason",
       "should not revive",
-      "--validation-method",
-      "focused-test",
-      "--validation-evidence",
-      "test:revive",
     ],
     { encoding: "utf8" }
   );

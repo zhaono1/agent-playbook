@@ -1,21 +1,24 @@
 # Agent Playbook
 
-> 面向 Coding Agent 的可移植技能、本地生命周期工具和工作流模式
+> 面向 Coding Agent 的本地优先 Behavior CI
 
 [English](./README.md) | 简体中文
 
 ## 概述
 
-本仓库整理并存储了使用 Claude Code 等 AI Agent 的实用资源，包括提示词模板、自定义技能、使用示例和最佳实践。
-
-本仓库只放适合公开分享、可迁移的 Agent 构建模块：可复用技能、提示词模式、工作流文档，以及面向 Claude Code、Codex、Gemini、DeepSeek Harness 的本地工具链。
+Agent Playbook 把重复出现的 Coding Agent 纠正，转化为经过评审、可执行验证、
+并且可以回滚的长期行为。它为 Claude Code、Codex、Gemini、DeepSeek Harness
+工作流提供本地 Behavior Inbox、Baseline/Candidate Eval Artifact、Durable Owner
+建议以及 Behavior Change Proposal。
 
 所有内容都尽量保持抽象和可移植。私有运行细节、公司专属流程、敏感业务上下文应放在其他私有位置。
 
 ## 你可以获得什么
 
-- 结构清晰的可复用技能：精简的 `SKILL.md` 配合更深入的 `references/`
-- 通过 `@codeharbor/agent-playbook` 提供的安装与生命周期工具
+- 对重复纠正和回归进行排序的 Behavior Inbox
+- 用可执行 Baseline/Candidate Eval 控制 validated 状态
+- Durable Owner 建议与本地 Behavior Change Proposal
+- 通过 `@codeharbor/agent-playbook` 提供的可复用技能和安装生命周期工具
 - 用于技能发现的 MCP Server
 - 关于规划、自我改进、自动化、上下文设计的工作流文档
 
@@ -32,6 +35,7 @@
 
 - [Agent Playbook 的上下文分层](./docs/context-layering-for-agent-playbooks.md)
 - [Skill 生态参考](./docs/skill-ecosystem-references.md)
+- [宿主 Conformance](./docs/host-conformance.md)
 - [集成与产品化路线图](./docs/integrations-and-product-roadmap.md)
 - [long-task-coordinator](./skills/long-task-coordinator/)
 
@@ -40,19 +44,34 @@
 - 想构建自己可复用 Agent Skill 的开发者
 - 想把规划、评审、恢复流程标准化的团队
 - 希望使用本地优先工具而非重 SaaS 编排的高级用户
+- 希望像评审代码一样评审 Agent 行为变更的小型 AI-native 团队
 
 ## 安装
 
 ### 方法零：一键安装（PNPM/NPM）
 
-为 Claude Code、Codex、Gemini 和 DeepSeek Harness 配置技能。目前会为
-Claude Code 接入有界、脱敏且默认私有的会话摘要与失败捕获，为 Codex 写入
-`agent_playbook` 元数据块，并为其他宿主准备技能目录。
+为 Claude Code、Codex、Gemini 和 DeepSeek Harness 配置技能。新安装默认
+不启用 Claude Hook；只有显式传入 `--hooks` 才会接入有界、脱敏且默认私有的
+会话摘要与失败捕获。安装器还会为 Codex 写入 `agent_playbook` 元数据块，并为
+其他宿主准备技能目录。
 
 ```bash
 pnpm dlx @codeharbor/agent-playbook init
 # 或者
 npm exec -- @codeharbor/agent-playbook init
+```
+
+显式启用 Claude Code 会话与失败 Hook：
+
+```bash
+pnpm dlx @codeharbor/agent-playbook init --hooks
+```
+
+检查本地安装契约，同时不把未观察到的宿主运行误报为已验证：
+
+```bash
+apb conformance
+apb conformance --format json
 ```
 
 仅项目级安装：
@@ -145,10 +164,17 @@ apb skills add ./skills/my-skill --scope project --target deepseek
 
 ```bash
 apb self-improve capture --kind correction --summary "使用缓存状态前先核对当前权威来源" --evidence "focused-test"
-apb self-improve list
-apb self-improve review cand-... --decision validate --reason "回归测试通过" --validation-method focused-test --validation-evidence "test:self-improvement"
-apb self-improve review cand-... --decision apply --reason "已写入唯一责任源" --owner "skill:self-improving-agent" --change-ref "commit:abc123"
+apb behavior inbox
+apb behavior owners cand-... --repo .
+apb behavior eval cand-... --artifact behavior-eval.json
+apb behavior review cand-... --decision validate --reason "回归场景通过" --eval-result /path/to/eval-result.json
+apb behavior proposal cand-... --owner "skill:self-improving-agent" --output behavior-proposal.md
+apb behavior review cand-... --decision apply --reason "已写入唯一责任源" --owner "skill:self-improving-agent" --change-ref "commit:abc123"
 ```
+
+Eval Artifact 使用参数数组直接启动命令，不经过 shell。通过的结果只保存断言
+状态与哈希，不落原始 stdout/stderr。详见
+[Eval Artifact 契约](./skills/self-improving-agent/references/eval-artifact.md)。
 
 可以把评审结果导出到 Obsidian 或其他本地 Markdown 知识系统：
 
@@ -156,17 +182,20 @@ apb self-improve review cand-... --decision apply --reason "已写入唯一责�
 apb self-improve export --output /path/to/vault/Agent/Learning.md
 ```
 
-Claude 自动捕获只观察失败事件，不保存原始工具输入或输出。详见
-[自我改进示例](./docs/self-improvement-example.md)。
+显式执行 `apb init --hooks` 后，Claude 自动捕获只观察失败事件，不保存原始
+工具输入或输出。详见[自我改进示例](./docs/self-improvement-example.md)。
 
 ## 平台支持情况
 
-| 平台 | 技能安装 | Hook / 配置自动化 | 当前状态 |
-|------|----------|-------------------|----------|
-| Claude Code | 支持 | 自动安装 SessionEnd 与 PostToolUseFailure hooks | 完整 |
-| Codex | 支持 | 向 `~/.codex/config.toml` 写入 `agent_playbook` 元数据块 | 部分支持 |
-| Gemini | 支持 | 暂无 hook 自动接入 | 仅技能分发 |
-| DeepSeek Harness | 支持 | 暂无 hook 自动接入 | 仅技能分发 |
+| 平台 | 本地分发 | 生命周期 Adapter | 运行时证据 |
+|------|----------|------------------|------------|
+| Claude Code | Skill 文件 | 可选 SessionEnd 与 PostToolUseFailure hooks（`--hooks`） | 只有实际观察宿主运行后才能验证 |
+| Codex | Skill 文件与 Agent Playbook 本地元数据标记 | 未提供 | 只有实际观察宿主运行后才能验证 |
+| Gemini | Skill 文件 | 未提供 | 只有实际观察宿主运行后才能验证 |
+| DeepSeek Harness | Skill 文件 | 未提供 | 只有实际观察宿主运行后才能验证 |
+
+`apb conformance` 只证明本地文件系统和配置契约。状态语义与证据边界见
+[宿主 Conformance](./docs/host-conformance.md)。
 
 MCP server 是独立的可选集成，目前以 Claude Code 作为配置示例，但工具契约
 可供任何支持 stdio MCP 的客户端使用。

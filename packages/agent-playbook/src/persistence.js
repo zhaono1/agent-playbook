@@ -63,6 +63,12 @@ function isProcessAlive(pid) {
   }
 }
 
+function isRetryableLockError(error) {
+  return Boolean(
+    error && (error.code === "EEXIST" || (process.platform === "win32" && error.code === "EPERM"))
+  );
+}
+
 function acquireFileLock(lockPath, options = {}) {
   const timeoutMs = options.timeoutMs || 3000;
   const staleMs = options.staleMs || 30000;
@@ -91,7 +97,7 @@ function acquireFileLock(lockPath, options = {}) {
         }
       };
     } catch (error) {
-      if (!error || error.code !== "EEXIST") {
+      if (!isRetryableLockError(error)) {
         throw error;
       }
       try {
@@ -108,7 +114,9 @@ function acquireFileLock(lockPath, options = {}) {
         if (statError && statError.code === "ENOENT") {
           continue;
         }
-        throw statError;
+        if (!isRetryableLockError(statError)) {
+          throw statError;
+        }
       }
       if (Date.now() - startedAt >= timeoutMs) {
         const timeoutError = new Error(`Timed out waiting for state lock ${lockPath}.`);

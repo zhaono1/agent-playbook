@@ -54,6 +54,7 @@ Deliver a Node-based CLI distributed via NPM/PNPM (`@codeharbor/agent-playbook`)
 - Maintain a manifest file under `~/.claude/skills/.agent-playbook.json` to track ownership.
 
 ### Claude Hooks
+- Fresh installs leave hook automation disabled; `--hooks` is explicit opt-in.
 - Merge into `~/.claude/settings.json` or `.claude/settings.json`.
 - Add hook entries for:
   - `SessionEnd`: run local CLI path with `session-log` and `transcript_path` from stdin.

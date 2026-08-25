@@ -12,6 +12,19 @@ const {
 } = require("./persistence");
 const { removeCodexBlock, upsertCodexBlock } = require("./codex-config");
 const { collectManagedResources, removeManagedResources } = require("./ownership");
+const {
+  SELF_IMPROVEMENT_SCHEMA_VERSION,
+  buildActiveRuleProjection,
+  buildBehaviorInbox,
+  loadCandidateStore,
+  resolveSelfImprovementEnvironment,
+  upsertLearningCandidate,
+  writeActiveRuleProjection,
+} = require("./self-improvement");
+const { loadEvalResult, runEvalArtifact } = require("./eval-runner");
+const { resolveOwnerCandidates } = require("./owner-resolver");
+const { buildBehaviorProposal } = require("./behavior-proposal");
+const { collectHostConformance } = require("./host-conformance");
 
 const PACKAGE_NAME = "@codeharbor/agent-playbook";
 const APP_NAME = "agent-playbook";
@@ -21,9 +34,6 @@ const LOCAL_CLI_DIR = "agent-playbook";
 const HOOK_SOURCE_VALUE = "agent-playbook";
 const STATE_FILE_NAME = "state.json";
 const DISABLED_DIR_NAME = ".disabled";
-const SELF_IMPROVEMENT_DIR_NAME = "self-improvement";
-const SELF_IMPROVEMENT_SCHEMA_VERSION = "2";
-const MAX_CANDIDATE_EVIDENCE = 10;
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const VALID_SKILL_SCOPES = new Set(["project", "global"]);
 const VALID_SKILL_TARGETS = new Set(["claude", "codex", "gemini", "dsh"]);
@@ -44,6 +54,8 @@ function main(argv, context) {
       return handleStatus(options, context);
     case "doctor":
       return handleDoctor(options, context);
+    case "conformance":
+      return handleConformance(options, context);
     case "repair":
       return handleRepair({ ...options, repair: true }, context);
     case "uninstall":
@@ -52,6 +64,8 @@ function main(argv, context) {
       return handleSessionLog(options);
     case "self-improve":
       return handleSelfImprove(options, parsed.positionals);
+    case "behavior":
+      return handleSelfImprove(options, parsed.positionals, "inbox");
     case "skills":
       return handleSkills(options, parsed.positionals, context);
     case "upgrade":
@@ -73,18 +87,27 @@ function printHelp() {
     `  ${APP_NAME} init [--project] [--copy] [--overwrite] [--hooks] [--no-hooks] [--session-dir <path>] [--dry-run] [--repo <path>]`,
     `  ${APP_NAME} status [--project] [--repo <path>]`,
     `  ${APP_NAME} doctor [--project] [--repo <path>]`,
+    `  ${APP_NAME} conformance [--project] [--repo <path>] [--format json]`,
     `  ${APP_NAME} repair [--project] [--overwrite] [--hooks] [--no-hooks] [--repo <path>]`,
     `  ${APP_NAME} uninstall [--project] [--repo <path>]`,
     `  ${APP_NAME} skills [list|info|add|remove|enable|disable|doctor|sync|upgrade|export|import]`,
+    `  ${APP_NAME} behavior [inbox|capture|owners|eval|review|proposal|export]`,
+    "",
+    "Fresh installs leave Claude hooks disabled; pass --hooks to opt in.",
+    "--session-dir requires hooks to be enabled.",
     "",
     "Hook commands:",
     `  ${APP_NAME} session-log [--session-dir <path>]`,
     `  ${APP_NAME} self-improve [capture] [--kind <kind>] [--summary <text>] [--evidence <text>]`,
     `  ${APP_NAME} self-improve list [--status <status>] [--format json]`,
+    `  ${APP_NAME} self-improve eval <candidate-id> --artifact <eval.json> [--format json]`,
     `  ${APP_NAME} self-improve review <candidate-id> --decision <validate|apply|observe|reject|supersede|rollback> --reason <text>`,
-    `    validate also requires --validation-method <method> --validation-evidence <reference>`,
+    `    validate also requires --eval-result <result.json> from self-improve eval`,
     `    apply also requires --owner <durable-owner> --change-ref <reference>`,
     `  ${APP_NAME} self-improve export --output <markdown-file>`,
+    `  ${APP_NAME} behavior inbox [--status <status>] [--format json]`,
+    `  ${APP_NAME} behavior owners <candidate-id> [--repo <path>] [--format json]`,
+    `  ${APP_NAME} behavior proposal <candidate-id> --owner <durable-owner> --output <markdown-file>`,
     "",
     "Other commands:",
     `  ${APP_NAME} upgrade`,
@@ -111,10 +134,10 @@ function parseArgs(argv) {
     "status",
     "decision",
     "reason",
-    "validation-method",
-    "validation-evidence",
     "owner",
     "change-ref",
+    "artifact",
+    "eval-result",
   ]);
   const options = {};
   const positionals = [];
@@ -166,14 +189,15 @@ function parseArgs(argv) {
 
 function handleInit(options, context) {
   const settings = resolveSettings(options, context);
-  const hooksEnabled = options.hooks !== false;
   const repoRoot = settings.repoRoot;
   const warnings = [];
   const overwriteState = createOverwriteState(options);
   const manifestPath = path.join(settings.claudeSkillsDir, ".agent-playbook.json");
   const previousManifest = readJsonStrict(manifestPath, null);
+  const hooksEnabled = resolveHooksEnabled(options, settings.claudeSettingsPath);
+  assertSessionDirRequiresHooks(options, hooksEnabled);
   assertCodexConfigReadable(settings);
-  if (hooksEnabled) {
+  if (hooksEnabled || options.hooks === false) {
     assertClaudeSettingsReadable(settings);
   }
 
@@ -196,7 +220,7 @@ function handleInit(options, context) {
     installedAt: new Date().toISOString(),
     repoRoot,
     copyMode: Boolean(options.copy),
-    hooksEnabled: hooksEnabled || hasHooks(settings.claudeSettingsPath),
+    hooksEnabled,
     links: {
       claude: [],
       codex: [],
@@ -247,6 +271,9 @@ function handleInit(options, context) {
     if (hookUpdated === false) {
       warnings.push("Unable to update Claude settings (invalid JSON).");
     }
+  } else if (options.hooks === false) {
+    removeHooks(settings);
+    removeLocalCli(settings);
   }
 
   updateCodexConfig(settings, options);
@@ -286,6 +313,68 @@ function handleDoctor(options, context) {
   }
 
   return Promise.resolve();
+}
+
+function handleConformance(options, context) {
+  const settings = resolveSettings(options, context || {});
+  const status = collectStatus(settings);
+  const manifest = readJsonSafe(
+    path.join(settings.claudeSkillsDir, ".agent-playbook.json")
+  );
+  const report = collectHostConformance({
+    packageVersion: VERSION,
+    skillsSource: settings.skillsSource,
+    hosts: {
+      claude: {
+        skillsDir: settings.claudeSkillsDir,
+        expectedSkills: getManifestSkillNames(manifest, "claude"),
+        manifestPresent: status.manifestPresent,
+        manifestReadable: status.manifestReadable,
+        settingsPath: settings.claudeSettingsPath,
+        localCliPath: path.join(
+          settings.claudeDir,
+          LOCAL_CLI_DIR,
+          "bin",
+          "agent-playbook.js"
+        ),
+      },
+      codex: {
+        skillsDir: settings.codexSkillsDir,
+        expectedSkills: getManifestSkillNames(manifest, "codex"),
+        metadataPresent: status.codexBlockPresent,
+      },
+      gemini: {
+        skillsDir: settings.geminiSkillsDir,
+        expectedSkills: getManifestSkillNames(manifest, "gemini"),
+      },
+      dsh: {
+        skillsDir: settings.dshSkillsDir,
+        expectedSkills: getManifestSkillNames(manifest, "dsh"),
+      },
+    },
+  });
+
+  if (options.format === "json") {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    printConformance(report);
+  }
+  if (report.overall !== "pass") {
+    process.exitCode = 1;
+  }
+  return Promise.resolve();
+}
+
+function getManifestSkillNames(manifest, host) {
+  const entries = manifest?.links?.[host];
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  return uniqueList(
+    entries
+      .map((entry) => path.basename(String(entry?.target || "")))
+      .filter((name) => SKILL_NAME_PATTERN.test(name))
+  ).sort();
 }
 
 function handleUninstall(options, context) {
@@ -346,13 +435,25 @@ async function handleSessionLog(options) {
   console.error(`Session log saved to ${outputPath}`);
 }
 
-async function handleSelfImprove(options, positionals) {
-  const subcommand = positionals[0] || "capture";
+async function handleSelfImprove(options, positionals, defaultSubcommand = "capture") {
+  const subcommand = positionals[0] || defaultSubcommand;
   if (subcommand === "list") {
     return handleSelfImproveList(options);
   }
+  if (subcommand === "inbox") {
+    return handleBehaviorInbox(options);
+  }
   if (subcommand === "review") {
     return handleSelfImproveReview(options, positionals.slice(1));
+  }
+  if (subcommand === "eval") {
+    return handleSelfImproveEval(options, positionals.slice(1));
+  }
+  if (subcommand === "owners") {
+    return handleBehaviorOwners(options, positionals.slice(1));
+  }
+  if (subcommand === "proposal") {
+    return handleBehaviorProposal(options, positionals.slice(1));
   }
   if (subcommand === "export") {
     return handleSelfImproveExport(options);
@@ -452,21 +553,6 @@ async function handleUpgrade(options, context) {
   }
 }
 
-function resolveSelfImprovementEnvironment(options) {
-  const configuredRoot = options["data-dir"] || process.env.AGENT_PLAYBOOK_DATA_DIR;
-  const dataRoot = configuredRoot
-    ? path.resolve(configuredRoot)
-    : path.join(os.homedir(), ".agent-playbook");
-  const root = path.join(dataRoot, SELF_IMPROVEMENT_DIR_NAME);
-  return {
-    root,
-    candidatesPath: path.join(root, "candidates.json"),
-    activeRulesPath: path.join(root, "active-rules.json"),
-    eventsDir: path.join(root, "events"),
-    lockPath: path.join(root, ".state.lock"),
-  };
-}
-
 function buildLearningSignal(input, options) {
   const manualSummary = sanitizeLearningText(options.summary, 240);
   const cwd = input.cwd || process.cwd();
@@ -557,108 +643,6 @@ function createEventId(now) {
   return `evt-${now.toISOString()}-${crypto.randomBytes(3).toString("hex")}`.replace(/[:.]/g, "-");
 }
 
-function loadCandidateStore(filePath) {
-  const data = readJsonStrict(filePath, null);
-  if (!data) {
-    return { schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION, updated_at: null, items: [] };
-  }
-  if (!Array.isArray(data.items)) {
-    const error = new Error(`Invalid candidate store schema in ${filePath}; refusing to overwrite it.`);
-    error.code = "APB_INVALID_CANDIDATE_SCHEMA";
-    throw error;
-  }
-  if (String(data.schema_version || "1") === "1") {
-    const seenIds = new Set();
-    return {
-      ...data,
-      schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION,
-      items: data.items.map((item, index) => {
-        const next = { ...item };
-        if (seenIds.has(next.id)) {
-          next.legacy_id = next.id;
-          next.id = `${next.id}-legacy-${index + 1}`;
-        }
-        seenIds.add(next.id);
-        if (next.status === "promoted") {
-          next.status = "validated";
-          next.legacy_status = "promoted";
-        }
-        next.reviews = Array.isArray(next.reviews)
-          ? next.reviews.map((review) => ({
-              ...review,
-              decision: review.decision === "promote" ? "validate" : review.decision,
-            }))
-          : [];
-        return next;
-      }),
-    };
-  }
-  if (String(data.schema_version) !== SELF_IMPROVEMENT_SCHEMA_VERSION) {
-    const error = new Error(
-      `Unsupported candidate store schema ${data.schema_version} in ${filePath}; refusing to overwrite it.`
-    );
-    error.code = "APB_UNSUPPORTED_CANDIDATE_SCHEMA";
-    throw error;
-  }
-  const ids = new Set();
-  for (const item of data.items) {
-    if (!item || !item.id || ids.has(item.id)) {
-      const error = new Error(`Candidate store ${filePath} contains an invalid or duplicate id.`);
-      error.code = "APB_INVALID_CANDIDATE_ID";
-      throw error;
-    }
-    ids.add(item.id);
-  }
-  return data;
-}
-
-function createCandidateFingerprint(signal) {
-  return crypto
-    .createHash("sha256")
-    .update(`${signal.kind}\n${signal.scope}\n${signal.summary.toLowerCase()}`)
-    .digest("hex");
-}
-
-function upsertLearningCandidate(store, signal, now) {
-  const fingerprint = createCandidateFingerprint(signal);
-  const timestamp = now.toISOString();
-  let candidate = store.items.find(
-    (item) =>
-      item.fingerprint === fingerprint &&
-      (item.status === "candidate" || item.status === "validated")
-  );
-  const evidence = { source: signal.evidence, observed_at: timestamp };
-
-  if (candidate) {
-    candidate.last_seen = timestamp;
-    candidate.occurrences += 1;
-    candidate.evidence = [...(candidate.evidence || []), evidence].slice(-MAX_CANDIDATE_EVIDENCE);
-  } else {
-    const applied = [...store.items]
-      .reverse()
-      .find((item) => item.fingerprint === fingerprint && item.status === "applied");
-    candidate = {
-      id: `cand-${fingerprint.slice(0, 12)}-${crypto.randomBytes(3).toString("hex")}`,
-      fingerprint,
-      status: "candidate",
-      kind: applied ? "regression" : signal.kind,
-      summary: signal.summary,
-      scope: signal.scope,
-      first_seen: timestamp,
-      last_seen: timestamp,
-      occurrences: 1,
-      evidence: [evidence],
-      reviews: [],
-    };
-    if (applied) {
-      candidate.regression_of = applied.id;
-    }
-    store.items.push(candidate);
-  }
-  store.updated_at = timestamp;
-  return candidate;
-}
-
 function handleSelfImproveList(options) {
   const env = resolveSelfImprovementEnvironment(options);
   const store = loadCandidateStore(env.candidatesPath);
@@ -678,6 +662,161 @@ function handleSelfImproveList(options) {
   return Promise.resolve();
 }
 
+function handleBehaviorInbox(options) {
+  const env = resolveSelfImprovementEnvironment(options);
+  const store = loadCandidateStore(env.candidatesPath);
+  const requestedStatus = options.status ? String(options.status).toLowerCase() : "";
+  const inbox = buildBehaviorInbox(store).filter(
+    (item) => !requestedStatus || item.status === requestedStatus
+  );
+  if (options.format === "json") {
+    console.log(JSON.stringify(inbox, null, 2));
+    return Promise.resolve();
+  }
+  if (!inbox.length) {
+    console.log("Behavior inbox is empty.");
+    return Promise.resolve();
+  }
+  inbox.forEach((item) => {
+    console.log(
+      `${item.attention}\t${item.id}\t${item.status}\t${item.occurrences}x\t${item.next_action}\t${item.summary}`
+    );
+  });
+  return Promise.resolve();
+}
+
+function handleBehaviorOwners(options, args) {
+  const candidateId = args[0];
+  if (!candidateId) {
+    console.error("Usage: agent-playbook behavior owners <candidate-id> [--repo <path>]");
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  const env = resolveSelfImprovementEnvironment(options);
+  const store = loadCandidateStore(env.candidatesPath);
+  const candidate = store.items.find((item) => item.id === candidateId);
+  if (!candidate) {
+    console.error(`Learning candidate not found: ${candidateId}`);
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  const requestedRoot = options.repo ? path.resolve(options.repo) : process.cwd();
+  const repoRoot = findRepoRoot(requestedRoot) || requestedRoot;
+  let owners;
+  try {
+    owners = resolveOwnerCandidates({ candidate, repoRoot });
+  } catch (error) {
+    console.error(`Owner resolution failed: ${error.message}`);
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  if (options.format === "json") {
+    console.log(JSON.stringify(owners, null, 2));
+    return Promise.resolve();
+  }
+  if (!owners.length) {
+    console.log("No durable owner candidates found. Choose one explicitly before application.");
+    return Promise.resolve();
+  }
+  owners.forEach((owner) => {
+    const matched = owner.matched_terms.length ? owner.matched_terms.join(",") : "-";
+    console.log(`${owner.score}\t${owner.owner}\t${owner.type}\t${matched}\t${owner.reason}`);
+  });
+  return Promise.resolve();
+}
+
+function handleBehaviorProposal(options, args) {
+  const candidateId = args[0];
+  if (!candidateId || !options.owner || !options.output) {
+    console.error(
+      "Usage: agent-playbook behavior proposal <candidate-id> --owner <durable-owner> --output <markdown-file>"
+    );
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  const env = resolveSelfImprovementEnvironment(options);
+  const store = loadCandidateStore(env.candidatesPath);
+  const candidate = store.items.find((item) => item.id === candidateId);
+  if (!candidate) {
+    console.error(`Learning candidate not found: ${candidateId}`);
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  let markdown;
+  try {
+    markdown = buildBehaviorProposal(candidate, sanitizeLearningText(options.owner, 160));
+  } catch (error) {
+    console.error(`Behavior proposal rejected: ${error.message}`);
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  const outputPath = path.resolve(options.output);
+  writeFileAtomic(outputPath, markdown, { mode: 0o600 });
+  console.log(`Behavior proposal written to ${outputPath}`);
+  return Promise.resolve();
+}
+
+function handleSelfImproveEval(options, args) {
+  const candidateId = args[0];
+  if (!candidateId || !options.artifact) {
+    console.error("Usage: agent-playbook self-improve eval <candidate-id> --artifact <eval.json>");
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+  const env = resolveSelfImprovementEnvironment(options);
+  const store = loadCandidateStore(env.candidatesPath);
+  const candidate = store.items.find((item) => item.id === candidateId);
+  if (!candidate) {
+    console.error(`Learning candidate not found: ${candidateId}`);
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+
+  let executed;
+  try {
+    executed = runEvalArtifact({
+      artifactPath: options.artifact,
+      candidateId,
+      resultDir: env.evalsDir,
+    });
+  } catch (error) {
+    console.error(`Evaluation failed to run: ${error.message}`);
+    process.exitCode = 1;
+    return Promise.resolve();
+  }
+
+  if (options.format === "json") {
+    console.log(
+      JSON.stringify(
+        {
+          result_path: executed.resultPath,
+          ...executed.result,
+        },
+        null,
+        2
+      )
+    );
+  } else {
+    executed.diagnostics.forEach((diagnostic) => {
+      console.log(`${diagnostic.passed ? "PASS" : "FAIL"}\t${diagnostic.id}`);
+      if (!diagnostic.passed) {
+        if (diagnostic.timedOut) {
+          console.error(`- ${diagnostic.id}: timed out`);
+        } else if (diagnostic.spawnError) {
+          console.error(`- ${diagnostic.id}: ${diagnostic.spawnError}`);
+        } else {
+          console.error(`- ${diagnostic.id}: exit ${diagnostic.exitCode}`);
+        }
+      }
+    });
+    console.log(`Eval result: ${executed.resultPath}`);
+  }
+  if (!executed.result.passed) {
+    process.exitCode = 1;
+  }
+  return Promise.resolve();
+}
+
 function handleSelfImproveReview(options, args) {
   const candidateId = args[0];
   const requestedDecision = String(options.decision || "").toLowerCase();
@@ -688,13 +827,6 @@ function handleSelfImproveReview(options, args) {
     console.error(
       "Usage: agent-playbook self-improve review <candidate-id> --decision <validate|apply|observe|reject|supersede|rollback> --reason <text>"
     );
-    process.exitCode = 1;
-    return Promise.resolve();
-  }
-  const validationMethod = sanitizeLearningText(options["validation-method"], 80);
-  const validationEvidence = sanitizeLearningText(options["validation-evidence"], 240);
-  if (decision === "validate" && (!validationMethod || !validationEvidence)) {
-    console.error("Validation requires --validation-method <method> and --validation-evidence <reference>.");
     process.exitCode = 1;
     return Promise.resolve();
   }
@@ -727,13 +859,34 @@ function handleSelfImproveReview(options, args) {
       return { error: `Invalid transition: ${candidate.status} -> ${decision}.` };
     }
 
+    let evalResult = null;
+    if (decision === "validate") {
+      if (!options["eval-result"]) {
+        return { error: "Validation requires --eval-result <result.json> from self-improve eval." };
+      }
+      try {
+        evalResult = loadEvalResult(options["eval-result"], candidateId, {
+          requirePassed: true,
+          resultDir: env.evalsDir,
+        });
+      } catch (error) {
+        return { error: `Validation rejected: ${error.message}` };
+      }
+    }
+
     const timestamp = new Date().toISOString();
     const review = { decision, reason, timestamp };
     if (decision === "validate") {
       candidate.status = "validated";
       candidate.validation = {
-        method: validationMethod,
-        evidence: validationEvidence,
+        method: "executable-eval",
+        evidence: `sha256:${evalResult.artifact_sha256}`,
+        eval_result: {
+          id: evalResult.id,
+          artifact_sha256: evalResult.artifact_sha256,
+          completed_at: evalResult.completed_at,
+          summary: evalResult.summary,
+        },
         validated_at: timestamp,
       };
       review.validation = candidate.validation;
@@ -770,37 +923,6 @@ function handleSelfImproveReview(options, args) {
   }
   console.log(`${result.candidate.id} reviewed: ${decision}.`);
   return Promise.resolve();
-}
-
-function buildActiveRuleProjection(candidateStore) {
-  return {
-    schema_version: SELF_IMPROVEMENT_SCHEMA_VERSION,
-    generated_from: "candidates.json",
-    updated_at: candidateStore.updated_at,
-    items: candidateStore.items
-      .filter((candidate) => candidate.status === "applied")
-      .map((candidate) => ({
-        id: `rule-${candidate.id.slice(5)}`,
-        candidate_id: candidate.id,
-        status: "applied",
-        kind: candidate.kind,
-        rule: candidate.summary,
-        scope: candidate.scope,
-        validation: candidate.validation,
-        owner: candidate.application && candidate.application.owner,
-        change_ref: candidate.application && candidate.application.change_ref,
-        evidence_count: candidate.occurrences,
-        applied_at: candidate.application && candidate.application.applied_at,
-      })),
-  };
-}
-
-function writeActiveRuleProjection(filePath, candidateStore) {
-  const projection = buildActiveRuleProjection(candidateStore);
-  if (!projection.items.length && !fs.existsSync(filePath)) {
-    return;
-  }
-  writeJsonAtomic(filePath, projection);
 }
 
 function handleSelfImproveExport(options) {
@@ -1867,13 +1989,29 @@ function handleSkillsRemove(options, args, settings) {
   const matches = matchesInfo.matches;
   const hasFilters = Boolean(options.scope || options.target);
   if (!matches.length) {
-    const stateKeys = Array.from(stateIndex.keys()).filter((key) => key.endsWith(`:${name}`));
-    if (stateKeys.length) {
-      stateKeys.forEach((key) => stateIndex.delete(key));
+    const staleStateEntries = Array.from(stateIndex.entries()).filter(([, entry]) => {
+      return (
+        entry.name === name &&
+        isStateEntryInEnvironment(entry, env) &&
+        matchesInfo.scopeInfo.scopes.includes(entry.scope) &&
+        matchesInfo.targetInfo.targets.includes(entry.target)
+      );
+    });
+    if (!hasFilters && staleStateEntries.length > 1) {
+      console.error(`Multiple stale state entries for "${name}". Use --scope or --target to disambiguate.`);
+      staleStateEntries.forEach(([, entry]) =>
+        console.error(`- ${entry.scope}/${entry.target}`)
+      );
+      process.exitCode = 1;
+      return Promise.resolve();
+    }
+    if (staleStateEntries.length) {
+      staleStateEntries.forEach(([key]) => stateIndex.delete(key));
       state.skills = Array.from(stateIndex.values());
       state.updated_at = new Date().toISOString();
       saveStateFile(env.statePath, state, options["dry-run"]);
-      console.log(`Removed ${stateKeys.length} state entries for "${name}".`);
+      const noun = staleStateEntries.length === 1 ? "entry" : "entries";
+      console.log(`Removed ${staleStateEntries.length} state ${noun} for "${name}".`);
       return Promise.resolve();
     }
     console.error(`Skill not found: ${name}`);
@@ -2590,16 +2728,25 @@ function updateClaudeSettings(settings, cliPath, options) {
   data.hooks = removeHookCommand(data.hooks, "PostToolUse", marker);
   data.hooks = removeHookCommand(data.hooks, "PostToolUseFailure", marker);
 
-  let sessionCommand = buildHookCommand(cliPath, "session-log");
-  sessionCommand = `${sessionCommand} --hook-source ${HOOK_SOURCE_VALUE}`;
+  const sessionArgs = [
+    cliPath,
+    "session-log",
+    "--hook-source",
+    HOOK_SOURCE_VALUE,
+  ];
   if (options["session-dir"]) {
     const sessionDir = path.resolve(options["session-dir"]);
-    sessionCommand = `${sessionCommand} --session-dir ${shellQuote(sessionDir)}`;
+    sessionArgs.push("--session-dir", sessionDir);
   }
-  const improveCommand = `${buildHookCommand(cliPath, "self-improve")} --hook-source ${HOOK_SOURCE_VALUE}`;
+  const sessionHook = { type: "command", command: process.execPath, args: sessionArgs };
+  const improveHook = {
+    type: "command",
+    command: process.execPath,
+    args: [cliPath, "self-improve", "--hook-source", HOOK_SOURCE_VALUE],
+  };
 
-  ensureHook(data.hooks, "SessionEnd", null, sessionCommand);
-  ensureHook(data.hooks, "PostToolUseFailure", "*", improveCommand);
+  ensureHook(data.hooks, "SessionEnd", null, sessionHook);
+  ensureHook(data.hooks, "PostToolUseFailure", "*", improveHook);
 
   data.agentPlaybook = {
     version: VERSION,
@@ -2686,7 +2833,7 @@ function removeLocalCli(settings) {
   }
 }
 
-function ensureHook(hooks, eventName, matcher, command) {
+function ensureHook(hooks, eventName, matcher, hookHandler) {
   hooks[eventName] = hooks[eventName] || [];
   const entries = hooks[eventName];
 
@@ -2697,9 +2844,10 @@ function ensureHook(hooks, eventName, matcher, command) {
   }
 
   entry.hooks = entry.hooks || [];
-  const exists = entry.hooks.some((hook) => hook.command === command);
+  const signature = hookHandlerSignature(hookHandler);
+  const exists = entry.hooks.some((hook) => hookHandlerSignature(hook) === signature);
   if (!exists) {
-    entry.hooks.push({ type: "command", command });
+    entry.hooks.push(hookHandler);
   }
 }
 
@@ -2711,7 +2859,9 @@ function removeHookCommand(hooks, eventName, command) {
 
   hooks[eventName] = entries
     .map((entry) => {
-      const nextHooks = (entry.hooks || []).filter((hook) => !String(hook.command || "").includes(command));
+      const nextHooks = (entry.hooks || []).filter(
+        (hook) => !hookHandlerText(hook).includes(command)
+      );
       return { ...entry, hooks: nextHooks };
     })
     .filter((entry) => (entry.hooks || []).length > 0);
@@ -2723,16 +2873,17 @@ function removeHookCommand(hooks, eventName, command) {
   return hooks;
 }
 
-function buildHookCommand(cliPath, subcommand) {
-  return `${shellQuote(cliPath)} ${subcommand}`;
+function hookHandlerSignature(hook) {
+  return JSON.stringify({
+    type: hook?.type || "",
+    command: hook?.command || "",
+    args: Array.isArray(hook?.args) ? hook.args : [],
+  });
 }
 
-function shellQuote(value) {
-  const text = String(value || "");
-  if (!text) {
-    return "''";
-  }
-  return `'${text.replace(/'/g, "'\\''")}'`;
+function hookHandlerText(hook) {
+  const args = Array.isArray(hook?.args) ? hook.args : [];
+  return [hook?.command, ...args].map((value) => String(value || "")).join(" ");
 }
 
 function resolveSessionDir(explicit, dataRoot, projectId) {
@@ -3035,12 +3186,28 @@ function hasHooks(settingsPath) {
     return false;
   }
   const sessionHook = (data.hooks.SessionEnd || []).some((entry) =>
-    (entry.hooks || []).some((hook) => String(hook.command || "").includes("session-log"))
+    (entry.hooks || []).some((hook) => hookHandlerText(hook).includes("session-log"))
   );
   const improveHook = (data.hooks.PostToolUseFailure || []).some((entry) =>
-    (entry.hooks || []).some((hook) => String(hook.command || "").includes("self-improve"))
+    (entry.hooks || []).some((hook) => hookHandlerText(hook).includes("self-improve"))
   );
   return sessionHook && improveHook;
+}
+
+function resolveHooksEnabled(options, settingsPath) {
+  if (options.hooks === true) {
+    return true;
+  }
+  if (options.hooks === false) {
+    return false;
+  }
+  return hasHooks(settingsPath);
+}
+
+function assertSessionDirRequiresHooks(options, hooksEnabled) {
+  if (options["session-dir"] && !hooksEnabled) {
+    throw new Error("--session-dir requires Claude hooks; pass --hooks explicitly.");
+  }
 }
 
 function summarizeIssues(status) {
@@ -3103,6 +3270,19 @@ function printStatus(status) {
     }`
   );
   console.log(`- Codex config block: ${status.codexBlockPresent ? "yes" : "no"}`);
+}
+
+function printConformance(report) {
+  console.log("Agent Playbook Host Conformance:");
+  console.log(`- Scope: ${report.scope}`);
+  console.log(`- Overall: ${report.overall}`);
+  report.hosts.forEach((host) => {
+    console.log(`- ${host.name}:`);
+    Object.entries(host.capabilities).forEach(([name, capability]) => {
+      console.log(`  - ${name}: ${capability.status} — ${capability.evidence}`);
+    });
+  });
+  console.log(`- Qualification: ${report.qualification}`);
 }
 
 function printInitSummary(
@@ -3318,13 +3498,14 @@ function handleRepair(options, context) {
   assertCodexConfigReadable(settings);
   const status = collectStatus(settings);
   const warnings = [];
-  const hooksEnabled = options.hooks !== false;
-  if (hooksEnabled) {
-    assertClaudeSettingsReadable(settings);
-  }
   const overwriteState = createOverwriteState(options);
   const manifestPath = path.join(settings.claudeSkillsDir, ".agent-playbook.json");
   const previousManifest = readJsonStrict(manifestPath, null);
+  const hooksEnabled = resolveHooksEnabled(options, settings.claudeSettingsPath);
+  assertSessionDirRequiresHooks(options, hooksEnabled);
+  if (hooksEnabled || options.hooks === false) {
+    assertClaudeSettingsReadable(settings);
+  }
 
   if (!settings.skillsSource) {
     warnings.push("Skills directory not found; skipping skill linking.");
@@ -3347,6 +3528,9 @@ function handleRepair(options, context) {
     if (updated === false) {
       warnings.push("Unable to update Claude settings (invalid JSON).");
     }
+  } else if (options.hooks === false) {
+    removeHooks(settings);
+    removeLocalCli(settings);
   }
 
   if (!status.codexBlockPresent) {

@@ -4,7 +4,7 @@ const BLOCK_START = "# BEGIN agent-playbook";
 const BLOCK_END = "# END agent-playbook";
 
 function isTableHeader(line) {
-  return /^\s*\[[^\]]+\]\s*(?:#.*)?$/.test(line);
+  return /^\s*(?:\[\[[^\r\n]+\]\]|\[[^\r\n]+\])\s*(?:#.*)?$/.test(line);
 }
 
 function removeCodexBlock(content) {
