@@ -64,7 +64,11 @@ test("eval artifact executes baseline and candidate scenarios without persisting
   assert.ok(executed.result.scenarios.every((scenario) => scenario.passed));
   assert.ok(executed.result.scenarios.every((scenario) => !Object.hasOwn(scenario, "stdout")));
   assert.ok(executed.result.scenarios.every((scenario) => !Object.hasOwn(scenario, "stderr")));
-  assert.strictEqual(fs.statSync(executed.resultPath).mode & 0o777, 0o600);
+  const resultStat = fs.statSync(executed.resultPath);
+  assert.ok(resultStat.isFile());
+  if (process.platform !== "win32") {
+    assert.strictEqual(resultStat.mode & 0o777, 0o600);
+  }
 
   const loaded = loadEvalResult(executed.resultPath, candidateId);
   assert.strictEqual(loaded.id, executed.result.id);
