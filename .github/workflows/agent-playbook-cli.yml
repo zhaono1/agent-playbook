@@ -44,4 +44,5 @@ jobs:
         working-directory: packages/agent-playbook
         run: npm run lint
       - name: Run CLI tests
-        run: node --test packages/agent-playbook/test/*.test.js
+        working-directory: packages/agent-playbook
+        run: npm test
