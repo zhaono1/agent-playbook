@@ -33,6 +33,6 @@ Use this page as a short map of external skill systems worth tracking. These are
 2. Put trigger intent in frontmatter `description`. Keep standard metadata values portable and string-based.
 3. Treat host hooks and workflow chaining as adapter configuration. If a repository uses a `metadata.hooks` extension, label it as non-portable intent rather than native host automation.
 4. Add representative evals for judgment-heavy skills and tests for deterministic runtime behavior.
-5. Self-improvement must capture privacy-safe candidates first, then promote one narrow behavior change only after explicit validation.
+5. Self-improvement must capture redacted, bounded candidates first, validate them with auditable evidence, and apply only one narrow behavior change to a named durable owner.
 6. Verify current host capabilities before claiming a hook, tool, or extension is executable.
 7. When adopting external skills, link to the source and record the borrowed pattern instead of copying large upstream skill bodies.

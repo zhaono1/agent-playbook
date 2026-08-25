@@ -10,18 +10,38 @@ on:
       - "packages/agent-playbook/**"
       - ".github/workflows/agent-playbook-cli.yml"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [18, 20]
+        include:
+          - os: ubuntu-latest
+            node-version: 18
+          - os: ubuntu-latest
+            node-version: 20
+          - os: ubuntu-latest
+            node-version: 22
+          - os: macos-latest
+            node-version: 20
+          - os: windows-latest
+            node-version: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node-version }}
       - name: Lint CLI
-        run: node -c packages/agent-playbook/src/cli.js
+        working-directory: packages/agent-playbook
+        run: npm run lint
       - name: Run CLI tests
         run: node --test packages/agent-playbook/test/*.test.js

@@ -26,22 +26,31 @@ Activates when you:
 
 ### 1. Risk-Based Testing
 
-Prioritize testing based on risk:
+Prioritize testing based on business impact, likelihood, change surface, and
+existing production evidence. The approaches below are examples to tailor, not
+universal requirements:
 
 | Risk Level | Testing Approach |
 |------------|------------------|
-| **Critical** (Money, Security, Data) | 100% automation, chaos testing |
+| **Critical** (Money, Security, Data) | Strong deterministic coverage; add resilience testing when the system supports it |
 | **High** (Core features) | Full E2E, integration, unit |
 | **Medium** (Secondary features) | Integration, unit |
 | **Low** (Edge features) | Unit tests only |
 
-### 2. Testing Pyramid Allocation
+### 2. Testing Portfolio
 
-| Level | % of Tests | Focus |
+Choose the mix from system boundaries and failure cost. Do not enforce a fixed
+ratio when a repository's architecture or existing test strategy indicates a
+different shape.
+
+| Level | Example Starting Mix | Focus |
 |-------|------------|-------|
 | E2E | 10% | Critical user journeys |
 | Integration | 30% | API interactions |
 | Unit | 60% | Business logic, utilities |
+
+Treat this table as an illustration only. Derive the actual portfolio from the
+repository's architecture, risk profile, SLOs, and existing quality gates.
 
 ### 3. Quality Gates
 
@@ -56,7 +65,7 @@ Prioritize testing based on risk:
 #### Pre-Merge
 ```bash
 - All tests: npm test
-- Coverage threshold: > 80%
+- Coverage threshold: use the repository gate or agree a risk-based target
 - Security scan: npm audit
 - License check: npm run check:licenses
 ```
@@ -83,8 +92,7 @@ Prioritize testing based on risk:
 ### Non-Functional Testing
 
 **Performance**
-- Response time < 200ms (p95)
-- Throughput > 1000 req/s
+- Derive latency and throughput targets from the current SLO, baseline, workload, and user journey
 - Memory usage stable
 - No memory leaks
 
@@ -152,6 +160,10 @@ Prioritize testing based on risk:
 
 ## Quality Metrics
 
+Use existing project gates first. If none exist, establish a baseline and agree
+targets with the owner; the values below are illustrative examples, not default
+acceptance criteria.
+
 ### Code Quality
 - **Test Coverage**: > 80%
 - **Cyclomatic Complexity**: < 10 per function
@@ -216,12 +228,12 @@ Critical / High / Medium / Low
 
 Generate test plan:
 ```bash
-python scripts/generate_test_plan.py <feature>
+python3 scripts/generate_test_plan.py --name <feature> --output docs/test-plan.md
 ```
 
 Analyze test coverage:
 ```bash
-python scripts/coverage_analysis.py
+python3 scripts/coverage_analysis.py --name <service-name> --output coverage-analysis.md
 ```
 
 ## References

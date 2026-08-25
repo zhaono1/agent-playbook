@@ -155,7 +155,7 @@ When writing a commit message:
 Use the validation script to check commit message format:
 
 ```bash
-python scripts/validate_commit.py "your commit message"
+python3 scripts/validate_commit.py "feat(scope): add behavior"
 ```
 
 ## Reference Documents

@@ -1,6 +1,6 @@
 ---
 name: prd-implementation-precheck
-description: Implement PRDs/specs with a mandatory precheck review before coding. Use when a user asks to implement a PRD/feature spec/requirements doc or says "implement PRD/spec". Perform a preflight review, raise questions on scope/consistency/risks, then implement after confirmation.
+description: Precheck a PRD or feature specification before implementation, resolving material blockers while continuing directly when requirements are clear.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion
 metadata:
   hooks:
@@ -17,14 +17,16 @@ metadata:
 
 ## Overview
 
-Perform a short PRD precheck, present issues and questions, then implement only after the user confirms or adjusts the PRD.
+Perform a short PRD precheck, surface material issues, then implement. Ask the
+user only when a missing choice would materially change behavior, architecture,
+data, or external side effects.
 
 ## Workflow
 
 1. Locate the PRD and any referenced files.
 2. Precheck the PRD and summarize intent in 1-2 sentences.
-3. List findings and questions (blockers first), then ask for confirmation to proceed.
-4. After confirmation, implement the PRD with minimal, consistent changes.
+3. List findings and questions with blockers first. If there are no material blockers, state assumptions and continue.
+4. When a blocker exists, resolve it with the user before implementation.
 5. Validate (tests or manual steps) or state what was not run.
 
 ## Precheck Checklist
@@ -117,6 +119,5 @@ grep -r "pattern_from_prd" src/ --include="*.ts"
 ## Output Expectations
 
 - Provide a concise precheck report with questions and risks.
-- Ask explicitly: "Proceed as-is, or update the PRD?"
-- If no blockers, state assumptions and continue only with user approval.
-
+- Ask "Proceed as-is, or update the PRD?" only when the answer changes the implementation materially.
+- If there are no blockers, state assumptions and continue without a redundant confirmation round.

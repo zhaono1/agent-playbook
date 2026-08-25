@@ -1,6 +1,6 @@
 # Security Auditor
 
-> A Claude Code skill for security audits and vulnerability assessment.
+> A portable agent skill for security audits and vulnerability assessment.
 
 ## Installation
 
@@ -19,26 +19,26 @@ You: Is this code secure?
 | Category | Checks |
 |----------|--------|
 | **A01** | Access Control |
-| **A02** | Cryptographic Failures |
-| **A03** | Injection |
-| **A04** | Insecure Design |
-| **A05** | Security Misconfiguration |
-| **A06** | Vulnerable Components |
+| **A02** | Security Misconfiguration |
+| **A03** | Software Supply Chain Failures |
+| **A04** | Cryptographic Failures |
+| **A05** | Injection |
+| **A06** | Insecure Design |
 | **A07** | Authentication Failures |
-| **A08** | Data Integrity |
-| **A09** | Logging Failures |
-| **A10** | SSRF |
+| **A08** | Software or Data Integrity Failures |
+| **A09** | Security Logging and Alerting Failures |
+| **A10** | Mishandling of Exceptional Conditions |
 
 ## Scripts
 
 Run security audit:
 ```bash
-python scripts/security_audit.py
+python3 scripts/security_audit.py --name <service-name> --output security-audit.md
 ```
 
 Find secrets:
 ```bash
-python scripts/find_secrets.py
+python3 scripts/find_secrets.py .
 ```
 
 ## Resources

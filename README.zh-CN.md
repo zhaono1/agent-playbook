@@ -45,7 +45,9 @@
 
 ### 方法零：一键安装（PNPM/NPM）
 
-为 Claude Code、Codex、Gemini 和 DeepSeek Harness 配置技能。目前会为 Claude Code 接入会话日志与隐私安全的失败捕获，为 Codex 写入 `agent_playbook` 元数据块，并为其他宿主准备技能目录。
+为 Claude Code、Codex、Gemini 和 DeepSeek Harness 配置技能。目前会为
+Claude Code 接入有界、脱敏且默认私有的会话摘要与失败捕获，为 Codex 写入
+`agent_playbook` 元数据块，并为其他宿主准备技能目录。
 
 ```bash
 pnpm dlx @codeharbor/agent-playbook init
@@ -138,12 +140,14 @@ apb skills add ./skills/my-skill --scope project --target deepseek
 
 ## 可验证的自我改进
 
-先捕获可复用纠正，再评审候选；只有代表性检查通过后才能提升：
+先捕获可复用纠正并用代表性证据验证；只有唯一的 durable owner 真正发生
+变化并完成回测后，才记录为 applied：
 
 ```bash
 apb self-improve capture --kind correction --summary "使用缓存状态前先核对当前权威来源" --evidence "focused-test"
 apb self-improve list
-apb self-improve review cand-... --decision promote --reason "回归测试通过" --validated
+apb self-improve review cand-... --decision validate --reason "回归测试通过" --validation-method focused-test --validation-evidence "test:self-improvement"
+apb self-improve review cand-... --decision apply --reason "已写入唯一责任源" --owner "skill:self-improving-agent" --change-ref "commit:abc123"
 ```
 
 可以把评审结果导出到 Obsidian 或其他本地 Markdown 知识系统：
@@ -164,7 +168,8 @@ Claude 自动捕获只观察失败事件，不保存原始工具输入或输出�
 | Gemini | 支持 | 暂无 hook 自动接入 | 仅技能分发 |
 | DeepSeek Harness | 支持 | 暂无 hook 自动接入 | 仅技能分发 |
 
-MCP server 是独立的可选集成，目前文档以 Claude Code 为主。
+MCP server 是独立的可选集成，目前以 Claude Code 作为配置示例，但工具契约
+可供任何支持 stdio MCP 的客户端使用。
 
 ## 项目结构
 
@@ -244,7 +249,7 @@ agent-playbook/
 │  prd-planner │ 完成
 └──────┬───────┘
        │
-       ├──→ self-improving-agent (后台) → 写入学习提案
+       ├──→ self-improving-agent（声明的后台后续动作；取决于宿主）
        │         └──→ create-pr (询问) ──→ session-logger (如宿主支持)
        │
        └──→ session-logger (如宿主支持)
@@ -260,10 +265,11 @@ agent-playbook/
 
 ## 使用方法
 
-安装后，技能在任何 Claude Code 会话中自动可用。你可以通过以下方式调用：
+安装后，各宿主会按自己的运行时规则发现技能。显式调用是跨宿主可移植的
+行为：
 
-1. **直接激活** - 技能根据上下文自动激活（例如提到 "PRD"、"planning"）
-2. **手动调用** - 明确要求 Claude 使用特定技能
+1. **宿主发现** - 宿主可根据描述和上下文选择技能
+2. **显式调用** - 明确要求当前 Agent 使用某个技能
 
 示例：
 
@@ -271,7 +277,7 @@ agent-playbook/
 你：帮我创建一个新认证功能的 PRD
 ```
 
-`prd-planner` 技能将自动激活。
+请为这个请求使用 `prd-planner`。是否自动激活由宿主决定。
 
 ## 工作流示例
 
@@ -282,15 +288,17 @@ agent-playbook/
        ↓
 prd-planner 执行
        ↓
-阶段完成 → 后续动作：
-       ├──→ self-improving-agent (后台) - 写入提案
+阶段完成 → 声明的后续动作（取决于宿主）：
+       ├──→ self-improving-agent (后台) - 可写入提案
        └──→ session-logger (如宿主支持) - 保存会话
        ↓
 用户："实现这个 PRD"
        ↓
 prd-implementation-precheck → 实现
        ↓
-code-reviewer → self-improving-agent → create-pr
+code-reviewer → 可选的学习候选
+       ↓
+create-pr（仅当用户要求提交审核时）
 ```
 
 ## AI Agent 学习路径

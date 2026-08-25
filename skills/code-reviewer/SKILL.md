@@ -219,7 +219,7 @@ Confirm the following:
 
 Run the review checklist script:
 ```bash
-python scripts/review_checklist.py <pr-number>
+python3 scripts/review_checklist.py --base main --output review-checklist.md
 ```
 
 ## References

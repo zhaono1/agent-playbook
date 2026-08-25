@@ -1,6 +1,6 @@
 {
   "name": "agent-playbook-mcp-server",
-  "version": "1.0.0",
+  "version": "0.4.1",
   "description": "MCP server for agent-playbook skills",
   "type": "module",
   "main": "index.js",

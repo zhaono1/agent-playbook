@@ -50,18 +50,30 @@ Define one representative task and a falsifiable check. Examples:
 Record the evidence outside the candidate summary when it contains private or
 project-specific context.
 
-## 4. Promote Explicitly
+## 4. Validate, Then Apply Explicitly
 
 ```bash
 apb self-improve review cand-... \
-  --decision promote \
+  --decision validate \
   --reason "representative regression test passes" \
-  --validated
+  --validation-method regression-test \
+  --validation-evidence "test/self-improvement.test.js"
 ```
 
-Promotion writes a traceable active rule. It does not automatically edit every
-skill. Update the one durable owner, rerun the representative check, and report
-the rollback path.
+Validation records proof but does not change Agent behavior. Update the one
+durable owner, rerun the representative check, then record the application:
+
+```bash
+apb self-improve review cand-... \
+  --decision apply \
+  --reason "durable owner updated and regression rerun" \
+  --owner "skills/example/SKILL.md" \
+  --change-ref "commit-or-pr-reference"
+```
+
+Only applied candidates appear in the derived active-rule projection. The CLI
+does not automatically edit every skill, and applied changes can later be
+superseded or rolled back.
 
 ## 5. Export to a Knowledge Notebook
 
@@ -76,4 +88,4 @@ candidate state under `~/.agent-playbook/self-improvement/` remains authoritativ
 
 `apb init` installs a Claude Code `PostToolUseFailure` hook. It sends the failure
 event to the same capture command. Redaction occurs before local storage, and a
-failure never promotes itself.
+failure never validates or applies itself.

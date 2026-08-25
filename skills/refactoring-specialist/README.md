@@ -1,6 +1,6 @@
 # Refactoring Specialist
 
-> A Claude Code skill for code refactoring and technical debt reduction.
+> A portable agent skill for code refactoring and technical debt reduction.
 
 ## Installation
 

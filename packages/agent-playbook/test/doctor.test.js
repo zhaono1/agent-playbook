@@ -8,6 +8,9 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const binPath = path.resolve(__dirname, "..", "bin", "agent-playbook.js");
+const packageVersion = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")
+).version;
 
 function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "agent-playbook-"));
@@ -49,6 +52,11 @@ test("doctor reports healthy when hooks and config are present", () => {
   const localCliDir = path.join(claudeDir, "agent-playbook", "bin");
   fs.mkdirSync(localCliDir, { recursive: true });
   fs.writeFileSync(path.join(localCliDir, "agent-playbook.js"), "#!/usr/bin/env node\n");
+  fs.writeFileSync(
+    path.join(claudeDir, "agent-playbook", "package.json"),
+    JSON.stringify({ version: packageVersion }, null, 2),
+    "utf8"
+  );
 
   const settings = {
     hooks: {
@@ -171,4 +179,77 @@ test("init shell-quotes hook paths and session dir", () => {
   assert.ok(
     fs.existsSync(path.join(dshDir, "skills", "self-improving-agent", "SKILL.md"))
   );
+});
+
+test("doctor fails closed when the shared state file is corrupt", () => {
+  const tempDir = makeTempDir();
+  const claudeDir = path.join(tempDir, "claude");
+  const codexDir = path.join(tempDir, "codex");
+  const geminiDir = path.join(tempDir, "gemini");
+  const dshDir = path.join(tempDir, "dsh");
+  const dataDir = path.join(tempDir, "data");
+  const repoRoot = path.resolve(__dirname, "..", "..", "..");
+  const env = {
+    ...process.env,
+    AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
+    AGENT_PLAYBOOK_CODEX_DIR: codexDir,
+    AGENT_PLAYBOOK_GEMINI_DIR: geminiDir,
+    AGENT_PLAYBOOK_DSH_DIR: dshDir,
+    AGENT_PLAYBOOK_DATA_DIR: dataDir,
+  };
+
+  const initialized = spawnSync(process.execPath, [binPath, "init", "--repo", repoRoot], {
+    encoding: "utf8",
+    env,
+  });
+  assert.strictEqual(initialized.status, 0, initialized.stderr);
+
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(path.join(dataDir, "state.json"), "{broken", "utf8");
+  const result = spawnSync(process.execPath, [binPath, "doctor", "--repo", repoRoot], {
+    encoding: "utf8",
+    env,
+  });
+
+  assert.strictEqual(result.status, 1);
+  assert.match(result.stderr, /unable to parse Agent Playbook state\.json/);
+});
+
+test("doctor reports hook runtime version drift", () => {
+  const tempDir = makeTempDir();
+  const claudeDir = path.join(tempDir, "claude");
+  const codexDir = path.join(tempDir, "codex");
+  const geminiDir = path.join(tempDir, "gemini");
+  const dshDir = path.join(tempDir, "dsh");
+  const dataDir = path.join(tempDir, "data");
+  const repoRoot = path.resolve(__dirname, "..", "..", "..");
+  const env = {
+    ...process.env,
+    AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
+    AGENT_PLAYBOOK_CODEX_DIR: codexDir,
+    AGENT_PLAYBOOK_GEMINI_DIR: geminiDir,
+    AGENT_PLAYBOOK_DSH_DIR: dshDir,
+    AGENT_PLAYBOOK_DATA_DIR: dataDir,
+  };
+
+  assert.strictEqual(
+    spawnSync(process.execPath, [binPath, "init", "--repo", repoRoot], {
+      encoding: "utf8",
+      env,
+    }).status,
+    0
+  );
+  fs.writeFileSync(
+    path.join(claudeDir, "agent-playbook", "package.json"),
+    JSON.stringify({ version: "0.0.0-stale" }),
+    "utf8"
+  );
+
+  const result = spawnSync(process.execPath, [binPath, "doctor", "--repo", repoRoot], {
+    encoding: "utf8",
+    env,
+  });
+
+  assert.strictEqual(result.status, 1);
+  assert.match(result.stderr, /hook CLI version mismatch.*0\.0\.0-stale/i);
 });

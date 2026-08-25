@@ -152,6 +152,11 @@ const filtered = useMemo(() =>
 
 ## Performance Targets
 
+Derive targets from the service SLO, current baseline, workload shape, cost
+budget, and critical user journey. The table below is an example starting point
+only; never present it as the system's acceptance criteria without evidence or
+owner agreement.
+
 | Metric | Target | Critical Threshold |
 |--------|--------|-------------------|
 | API Response (p50) | < 100ms | < 500ms |
@@ -230,12 +235,12 @@ const throttledScroll = throttle(handleScroll, 100);
 
 Profile application:
 ```bash
-python scripts/profile.py
+python3 scripts/profile.py --name <service-name> --output perf-profile.txt
 ```
 
 Generate performance report:
 ```bash
-python scripts/perf_report.py
+python3 scripts/perf_report.py --name <service-name> --output perf-report.md
 ```
 
 ## References

@@ -1,6 +1,6 @@
 # Performance Engineer
 
-> A Claude Code skill for performance optimization and analysis.
+> A portable agent skill for performance optimization and analysis.
 
 ## Installation
 
@@ -28,12 +28,12 @@ You: Profile this application
 
 Profile application:
 ```bash
-python scripts/profile.py
+python3 scripts/profile.py --name <service-name> --output perf-profile.txt
 ```
 
 Generate performance report:
 ```bash
-python scripts/perf_report.py
+python3 scripts/perf_report.py --name <service-name> --output perf-report.md
 ```
 
 ## Resources

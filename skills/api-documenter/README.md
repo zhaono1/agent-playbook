@@ -1,6 +1,6 @@
 # API Documenter
 
-> A Claude Code skill for OpenAPI/Swagger API documentation.
+> A portable agent skill for OpenAPI/Swagger API documentation.
 
 ## Installation
 
@@ -27,12 +27,12 @@ The skill generates OpenAPI 3.0 specifications following:
 
 Generate OpenAPI spec:
 ```bash
-python scripts/generate_openapi.py
+python3 scripts/generate_openapi.py --name <resource-name> --output openapi.yaml
 ```
 
 Validate OpenAPI spec:
 ```bash
-python scripts/validate_openapi.py openapi.yaml
+python3 scripts/validate_openapi.py --input openapi.yaml
 ```
 
 ## Resources

@@ -3,13 +3,15 @@
 ## State Model
 
 ```text
-event -> candidate -> observe | reject | promote -> active rule
+event -> candidate -> validate -> apply -> supersede | rollback
+                  \-> observe | reject
 ```
 
-- Events are privacy-safe evidence envelopes, not transcripts.
+- Events are bounded and redacted evidence envelopes, not transcripts.
 - Candidates group identical reusable summaries by fingerprint.
 - Observation adds review evidence without changing active behavior.
-- Promotion requires explicit validation and writes one active rule.
+- Validation requires a named method and evidence reference; it does not change active behavior.
+- Application requires one durable owner and change reference, then projects one applied rule.
 - Rejection prevents a disproved occurrence from being reused as the same candidate.
 
 ## Storage Contract
@@ -29,12 +31,13 @@ Event fields are bounded to `kind`, `summary`, `evidence`, `scope`, `source`,
 timestamp, candidate id, and tool version. Raw prompts, transcript paths, tool
 inputs, and tool outputs are intentionally excluded.
 
-Candidate fields include a stable hash fingerprint, lifecycle state, occurrence
-count, bounded evidence list, timestamps, and review history. Active rules keep
-the candidate id and validation reason for traceability.
+Candidate fields include a hash fingerprint, unique identity, lifecycle state,
+occurrence count, bounded evidence list, validation/application records,
+timestamps, and review history. `active-rules.json` is a generated projection
+of candidates in `applied` state, not a second source of truth.
 
-Writes use a temporary file and rename in the same directory so readers do not
-observe partially written state.
+Writes use a process lock plus a temporary file and same-directory rename so
+concurrent capture does not lose updates and readers do not observe partial state.
 
 ## Host Adapter Contract
 
@@ -55,7 +58,7 @@ failure event should use explicit manual capture instead of scraping transcripts
 
 ## Knowledge Sink Contract
 
-`self-improve export` produces deterministic Markdown sections for active rules
+`self-improve export` produces deterministic Markdown sections for applied rules
 and open candidates. A scheduler may replace the same file in an Obsidian vault.
 The vault copy is disposable; structured CLI state remains authoritative.
 
@@ -68,14 +71,16 @@ apb self-improve export --output "$VAULT_PATH/Agent/Learning.md"
 Use the scheduler provided by the operating system or automation host. Keep the
 vault path and scheduling policy outside the public skill.
 
-## Promotion Review
+## Validation and Application Review
 
-Before `--validated`, answer:
+Before `--decision validate`, answer:
 
 1. What current evidence supports the candidate?
 2. What representative task would fail if it were wrong?
 3. Which single durable owner should change?
 4. Is the rule portable and free of private context?
-5. What command or review proves the behavior after promotion?
+5. What command or review provides the validation evidence?
 
-If any answer is missing, use `observe` rather than `promote`.
+If any answer is missing, use `observe` rather than `validate`. After the owner
+actually changes, record `apply --owner ... --change-ref ...`; never infer
+application from validation alone.

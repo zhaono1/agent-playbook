@@ -1,6 +1,6 @@
 # Debugger
 
-> A Claude Code skill for systematic debugging and issue resolution.
+> A portable agent skill for systematic debugging and issue resolution.
 
 ## Installation
 
@@ -44,7 +44,7 @@ The skill will:
 
 Generate debug report:
 ```bash
-python scripts/debug_report.py "<error-message>"
+python3 scripts/debug_report.py --name <error-message> --output debug-report.md
 ```
 
 ## Resources

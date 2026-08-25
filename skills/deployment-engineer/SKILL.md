@@ -14,6 +14,14 @@ metadata:
 
 Specialist in deployment automation, CI/CD pipelines, and infrastructure management.
 
+## Permission Boundary
+
+Planning, generating configuration, and running read-only validation do not authorize
+deployment. Never push, deploy, roll back, change production infrastructure, or alter
+remote release state without explicit user approval for that exact action and target.
+Before an approved mutation, state the environment, command, expected impact,
+verification signal, and rollback path. Stop if the target or authority is ambiguous.
+
 ## When This Skill Activates
 
 Activates when you:
@@ -233,12 +241,12 @@ logger.info('Deployment started', {
 
 Generate deployment config:
 ```bash
-python scripts/generate_deploy.py <environment>
+python3 scripts/generate_deploy.py --env <environment> --name <service-name>
 ```
 
 Validate deployment:
 ```bash
-python scripts/validate_deploy.py
+python3 scripts/validate_deploy.py --input deploy-plan.md
 ```
 
 ## References

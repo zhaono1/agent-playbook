@@ -37,8 +37,8 @@ This skill should be used when:
 │  workflow-orchestrator                                      │
 │       ↓                                                     │
 │  ┌─────────────────────────────────────┐                   │
-│  │ auto-trigger self-improving-agent   │ (background)       │
-│  │ auto-trigger session-logger         │ (auto)            │
+│  │ declared self-improving follow-up   │ (record/run)       │
+│  │ declared session logging follow-up  │ (record/run)       │
 │  └─────────────────────────────────────┘                   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -97,13 +97,14 @@ Actions:
 3. Run or record session-logger if the host supports it
 ```
 
-### Self-Improvement Complete
+### Self-Improvement Applied
 
 ```markdown
 Detected when:
-- Reflection complete
-- Patterns abstracted
-- Skill files modified
+- Candidate validated with auditable evidence
+- One named durable owner changed
+- Representative behavior rerun
+- Candidate recorded as applied
 
 Actions:
 1. Ask before running create-pr
@@ -126,8 +127,9 @@ The self-improving-agent:
 - Captures a candidate only when reusable evidence exists
 - Excludes raw transcripts and private tool payloads
 - Keeps uncertain findings under observation
-- Promotes validated changes only after explicit approval or strong evidence
-- Proves the representative behavior after promotion
+- Validates candidates only with explicit, auditable evidence
+- Applies validated changes only to a named durable owner with a change reference
+- Proves the representative behavior after application
 ```
 
 ## Error Handling (on_error)
@@ -161,15 +163,12 @@ hooks:
       mode: background
 ```
 
-### Current Skill Hooks
+### Current Hook Contract
 
-- **prd-planner**: After PRD complete → self-improving-agent + session-logger
-- **self-improving-agent**: After improvement → create-pr + session-logger
-- **prd-implementation-precheck**: After implementation → self-improving-agent + session-logger
-- **code-reviewer**: After review → self-improving-agent + session-logger
-- **debugger**: After debugging → self-improving-agent + session-logger
-- **create-pr**: After PR created → session-logger
-- **session-logger**: No trigger (terminates chain)
+Hook metadata is declarative intent, not proof of CLI automation. Read the
+current skill front matter before acting. An absent hook means no declared
+follow-up; an existing hook still requires host support and the permission
+boundary for the target action.
 
 ### Universal Learning Pattern
 
@@ -187,11 +186,13 @@ hooks:
     ↓                   ↓
 self-improving-agent  session-logger
     ↓                   ↓
-Capture proposal      Save context
+Capture candidate     Save bounded context
     ↓                   ↓
-Validate changes      Log session
+Validate evidence     Log session
     ↓
-create-pr (if modified)
+Apply to named owner
+    ↓
+create-pr (only if submission was requested)
 ```
 ```
 
@@ -221,15 +222,15 @@ User: "Create a PRD and implement it"
         ↓
 prd-planner → workflow-orchestrator
         ↓
-self-improving-agent → workflow-orchestrator
+self-improving-agent (candidate capture only)
         ↓
 prd-implementation-precheck
         ↓
 implementation complete → workflow-orchestrator
         ↓
-code-reviewer → self-improving-agent → workflow-orchestrator
+code-reviewer → optional candidate capture
         ↓
-create-pr → workflow-orchestrator
+create-pr (only when requested) → workflow-orchestrator
         ↓
 session-logger
 ```
@@ -286,7 +287,7 @@ Log what was triggered and the result:
 | Skill | Triggers After |
 |-------|----------------|
 | `prd-planner` | self-improving-agent, session-logger |
-| `self-improving-agent` | create-pr, session-logger |
+| `self-improving-agent` | No automatic PR; applied changes may declare a logging follow-up |
 | `prd-implementation-precheck` | self-improving-agent, session-logger |
 | `code-reviewer` | self-improving-agent, session-logger |
 | `create-pr` | session-logger |
@@ -340,7 +341,7 @@ hooks:
 
 ## Best Practices
 
-1. **Always log to session** - Every workflow should end with session-logger
+1. **Log only when supported and appropriate** - Session logging is a bounded optional follow-up
 2. **Ask before major actions** - PRs, deployments, destructive changes
 3. **Background for analysis** - Reflection, evaluation, optimization
 4. **Auto for status** - Logging, status updates, bookmarks

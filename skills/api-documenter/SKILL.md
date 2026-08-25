@@ -200,12 +200,12 @@ Common HTTP status codes:
 
 Generate OpenAPI spec from code:
 ```bash
-python scripts/generate_openapi.py
+python3 scripts/generate_openapi.py --name <resource-name> --output openapi.yaml
 ```
 
 Validate OpenAPI spec:
 ```bash
-python scripts/validate_openapi.py openapi.yaml
+python3 scripts/validate_openapi.py --input openapi.yaml
 ```
 
 ## References

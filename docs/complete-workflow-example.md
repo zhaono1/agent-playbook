@@ -184,9 +184,10 @@ apb self-improve capture \
   --evidence "explicit-user-feedback"
 ```
 
-这条经验先进入 candidate 队列。只有经过代表性检查并显式执行
-`review --decision promote --validated` 后，才会进入 active rules；单次反馈
-不会自动改写多个 skills。
+这条经验先进入 candidate 队列。代表性检查通过后先执行
+`review --decision validate` 并记录验证方法与证据；写入唯一责任源并回测后，
+再执行 `review --decision apply` 并记录 owner 与 change ref。只有 applied 项
+才会进入派生的 active rules；单次反馈不会自动改写多个 skills。
 
 ---
 
@@ -194,7 +195,7 @@ apb self-improve capture \
 
 **你：**
 ```
-提交代码
+提交代码并创建 PR
 ```
 
 **Claude 调用 `commit-helper` → `create-pr`：**
@@ -292,7 +293,7 @@ Claude: [调用 code-reviewer]
 [记录 self-improving-agent 后续动作，提取审核模式提案]
 
 ═══════════════════════════════════════════════════════════════
-你: 提交代码
+你: 提交代码并创建 PR
 ═══════════════════════════════════════════════════════════════
 
 Claude: [调用 create-pr]
@@ -311,7 +312,7 @@ Claude: [调用 create-pr]
 | prd-planner 完成 | session-logger | 宿主支持时保存会话 |
 | code-reviewer 完成 | self-improving-agent | 提取代码质量模式提案 |
 | 有价值的技能完成 | session-logger | 宿主支持时记录活动 |
-| 用户要求提交 | create-pr | 创建 PR |
+| 用户要求提交审核或创建 PR | create-pr | 创建 PR |
 
 ---
 
@@ -323,7 +324,7 @@ Claude: [调用 create-pr]
 1. 发送图片/需求 → prd-planner 创建 PRD
 2. 说"实现它" → 开始编码
 3. 说"review" → code-reviewer 审核
-4. 说"提交" → create-pr 提交 PR
+4. 说"提交并创建 PR" → create-pr 提交 PR
 ```
 
 ### 完整流程（带反馈）
@@ -334,7 +335,7 @@ Claude: [调用 create-pr]
 3. 说"实现" → 编写代码
 4. 说"review" → 代码审核
 5. 给反馈 → self-improving-agent 学习
-6. 说"提交" → 创建 PR
+6. 说"提交并创建 PR" → 创建 PR
 ```
 
 ---

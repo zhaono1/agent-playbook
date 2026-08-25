@@ -1,12 +1,17 @@
-# OWASP Top 10 (2021)
+# OWASP Top 10 (2025)
 
 1. Broken Access Control
-2. Cryptographic Failures
-3. Injection
-4. Insecure Design
-5. Security Misconfiguration
-6. Vulnerable and Outdated Components
-7. Identification and Authentication Failures
-8. Software and Data Integrity Failures
-9. Security Logging and Monitoring Failures
-10. Server-Side Request Forgery
+2. Security Misconfiguration
+3. Software Supply Chain Failures
+4. Cryptographic Failures
+5. Injection
+6. Insecure Design
+7. Authentication Failures
+8. Software or Data Integrity Failures
+9. Security Logging and Alerting Failures
+10. Mishandling of Exceptional Conditions
+
+Source: <https://owasp.org/Top10/2025/>
+
+The Top 10 is an awareness document. Use OWASP ASVS or the project's required
+standard when a verifiable control baseline is needed.

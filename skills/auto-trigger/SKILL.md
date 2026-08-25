@@ -116,19 +116,20 @@ hooks:
 ---
 ```
 
-### self-improving-agent uses an explicit promotion gate
+### self-improving-agent uses explicit validation and application gates
 
 ```yaml
 ---
 name: self-improving-agent
-description: Captures privacy-safe candidates and promotes only validated rules...
+description: Captures redacted candidates, validates them with evidence, and records only explicitly applied rules...
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 ```
 
 Its Claude failure hook is installed by the CLI adapter, not declared as
-portable skill metadata. Other hosts should use documented adapters or manual
-capture.
+portable skill metadata. The `hooks` examples in this skill are declarative
+intent only unless a host adapter explicitly implements them. Other hosts
+should use documented adapters or manual capture.
 
 ### create-pr should add
 
