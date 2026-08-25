@@ -123,11 +123,11 @@ Actions:
 2. Run or record session-logger if the host supports it
 
 The self-improving-agent:
-- Extracts experience from completed skill
-- Identifies patterns and insights
-- Writes memory or proposal artifacts
+- Captures a candidate only when reusable evidence exists
+- Excludes raw transcripts and private tool payloads
+- Keeps uncertain findings under observation
 - Promotes validated changes only after explicit approval or strong evidence
-- Consolidates memory for future reference
+- Proves the representative behavior after promotion
 ```
 
 ## Error Handling (on_error)

@@ -108,37 +108,140 @@ test("session-log limits repeated transcript details", () => {
   assert.doesNotMatch(content, /echo command-12/);
 });
 
-test("self-improve reads skill hooks from front matter", () => {
+test("self-improve captures redacted failures and deduplicates candidates", () => {
   const tempDir = makeTempDir();
-  const homeDir = path.join(tempDir, "home");
+  const dataDir = path.join(tempDir, "data");
   const repoRoot = path.resolve(__dirname, "..", "..", "..");
   const input = JSON.stringify({
     session_id: "test-session",
     cwd: repoRoot,
-    tool_name: "Write",
-    tool_input: { file_path: path.join(tempDir, "feature-prd.md") },
-    tool_output: "Phase 6 COMPLETE",
+    hook_event_name: "PostToolUseFailure",
+    tool_name: "Bash",
+    tool_input: { command: "deploy --password=never-store-this" },
+    error: "Authorization: Bearer private-token-value caused timeout",
   });
 
-  const result = spawnSync(process.execPath, [binPath, "self-improve"], {
-    encoding: "utf8",
-    input,
-    env: {
-      ...process.env,
-      HOME: homeDir,
-    },
+  for (let index = 0; index < 2; index += 1) {
+    const result = spawnSync(
+      process.execPath,
+      [binPath, "self-improve", "--data-dir", dataDir],
+      { encoding: "utf8", input }
+    );
+    assert.strictEqual(result.status, 0);
+  }
+
+  const storePath = path.join(dataDir, "self-improvement", "candidates.json");
+  const storeText = fs.readFileSync(storePath, "utf8");
+  const store = JSON.parse(storeText);
+  assert.strictEqual(store.items.length, 1);
+  assert.strictEqual(store.items[0].occurrences, 2);
+  assert.match(store.items[0].summary, /\[REDACTED\]/);
+  assert.doesNotMatch(storeText, /private-token-value|never-store-this/);
+});
+
+test("self-improve ignores successful hook events without an explicit lesson", () => {
+  const tempDir = makeTempDir();
+  const dataDir = path.join(tempDir, "data");
+  const input = JSON.stringify({
+    hook_event_name: "PostToolUse",
+    tool_name: "Bash",
+    tool_output: "PASS",
   });
+
+  const result = spawnSync(
+    process.execPath,
+    [binPath, "self-improve", "--data-dir", dataDir],
+    { encoding: "utf8", input }
+  );
 
   assert.strictEqual(result.status, 0);
+  assert.match(result.stderr, /No reusable learning signal captured/);
+  assert.ok(!fs.existsSync(path.join(dataDir, "self-improvement", "candidates.json")));
+});
 
-  const triggersDir = path.join(homeDir, ".claude", "memory", "triggers");
-  const triggerFiles = fs.readdirSync(triggersDir).filter((file) => file.endsWith(".json"));
-  assert.strictEqual(triggerFiles.length, 1);
-
-  const trigger = JSON.parse(fs.readFileSync(path.join(triggersDir, triggerFiles[0]), "utf8"));
-  assert.strictEqual(trigger.source_skill, "prd-planner");
-  assert.deepEqual(
-    trigger.pending_triggers.map((item) => item.reason),
-    ["Extract patterns and improve PRD quality", "Save session context"]
+test("self-improve requires validation before promotion and exports markdown", () => {
+  const tempDir = makeTempDir();
+  const dataDir = path.join(tempDir, "data");
+  const outputPath = path.join(tempDir, "vault", "learning.md");
+  const summary = "Verify the current source before relying on cached state";
+  const capture = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "self-improve",
+      "capture",
+      "--data-dir",
+      dataDir,
+      "--kind",
+      "correction",
+      "--summary",
+      summary,
+      "--evidence",
+      "focused-test",
+    ],
+    { encoding: "utf8", input: "" }
   );
+  assert.strictEqual(capture.status, 0);
+
+  const list = spawnSync(
+    process.execPath,
+    [binPath, "self-improve", "list", "--data-dir", dataDir, "--format", "json"],
+    { encoding: "utf8" }
+  );
+  assert.strictEqual(list.status, 0);
+  const candidateId = JSON.parse(list.stdout)[0].id;
+
+  const unvalidated = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "self-improve",
+      "review",
+      candidateId,
+      "--data-dir",
+      dataDir,
+      "--decision",
+      "promote",
+      "--reason",
+      "confirmed by a focused test",
+    ],
+    { encoding: "utf8" }
+  );
+  assert.strictEqual(unvalidated.status, 1);
+  assert.match(unvalidated.stderr, /requires --validated/);
+
+  const promoted = spawnSync(
+    process.execPath,
+    [
+      binPath,
+      "self-improve",
+      "review",
+      candidateId,
+      "--data-dir",
+      dataDir,
+      "--decision",
+      "promote",
+      "--reason",
+      "confirmed by a focused test",
+      "--validated",
+    ],
+    { encoding: "utf8" }
+  );
+  assert.strictEqual(promoted.status, 0);
+
+  const exported = spawnSync(
+    process.execPath,
+    [binPath, "self-improve", "export", "--data-dir", dataDir, "--output", outputPath],
+    { encoding: "utf8" }
+  );
+  assert.strictEqual(exported.status, 0);
+  const notebook = fs.readFileSync(outputPath, "utf8");
+  assert.match(notebook, /## Active Rules/);
+  assert.match(notebook, new RegExp(summary));
+
+  const active = JSON.parse(
+    fs.readFileSync(path.join(dataDir, "self-improvement", "active-rules.json"), "utf8")
+  );
+  assert.strictEqual(active.items.length, 1);
+  assert.strictEqual(active.items[0].candidate_id, candidateId);
 });

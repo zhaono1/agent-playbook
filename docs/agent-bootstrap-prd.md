@@ -2,6 +2,9 @@
 
 > Status: Historical plan / partially implemented
 > Last updated: 2026-01-20 16:39
+> Superseded for self-improvement and host support by
+> [Integrations and Product Roadmap](./integrations-and-product-roadmap.md) and
+> [Self-Improvement Example](./self-improvement-example.md).
 
 ## Table of Contents
 - [Problem Statement](#problem-statement)

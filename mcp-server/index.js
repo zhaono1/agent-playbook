@@ -36,7 +36,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "list_skills",
-      description: "List all available Claude Code skills in agent-playbook",
+      description: "List all portable agent skills in agent-playbook",
       inputSchema: {
         type: "object",
         properties: {

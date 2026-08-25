@@ -1,12 +1,12 @@
 # Agent Playbook
 
-> A collection of practical guides, prompts, and skills for AI Agents (Claude Code)
+> Portable skills, local lifecycle tooling, and workflow patterns for coding agents
 
 English | [简体中文](./README.zh-CN.md)
 
 ## Overview
 
-This repository collects practical, public-facing building blocks for AI agents: reusable skills, prompt patterns, workflow docs, and tooling for Claude Code, Codex, and Gemini.
+This repository collects practical, public-facing building blocks for AI agents: reusable skills, prompt patterns, workflow docs, and tooling for Claude Code, Codex, Gemini, and DeepSeek Harness.
 
 Everything in this repository is intended to stay portable and abstract. Private operating details, company-specific workflows, and sensitive business context should live elsewhere.
 
@@ -30,6 +30,7 @@ Further reading:
 
 - [Context Layering for Agent Playbooks](./docs/context-layering-for-agent-playbooks.md)
 - [Skill Ecosystem References](./docs/skill-ecosystem-references.md)
+- [Integrations and Product Roadmap](./docs/integrations-and-product-roadmap.md)
 - [long-task-coordinator](./skills/long-task-coordinator/)
 
 ## Who this is for
@@ -42,7 +43,7 @@ Further reading:
 
 ### Method 0: One-Command Installer (PNPM/NPM)
 
-Sets up skills for Claude Code, Codex, and Gemini. It currently wires session logging and self-improvement hooks for Claude Code, records an `agent_playbook` metadata block for Codex, and prepares Gemini skill directories.
+Sets up skills for Claude Code, Codex, Gemini, and DeepSeek Harness. It wires session logging and privacy-safe failure capture for Claude Code, records an `agent_playbook` metadata block for Codex, and prepares the other hosts' skill directories.
 
 ```bash
 pnpm dlx @codeharbor/agent-playbook init
@@ -61,12 +62,13 @@ pnpm dlx @codeharbor/agent-playbook init --project
 Link the skills to your global skills directories:
 
 ```bash
-mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills
+mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills ~/.dsh/skills
 for skill in /path/to/agent-playbook/skills/*; do
   [ -f "$skill/SKILL.md" ] || continue
   ln -s "$skill" ~/.claude/skills/
   ln -s "$skill" ~/.codex/skills/
   ln -s "$skill" ~/.gemini/skills/
+  ln -s "$skill" ~/.dsh/skills/
 done
 ```
 
@@ -74,9 +76,9 @@ Example:
 
 ```bash
 # Link individual skills
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/skill-router ~/.claude/skills/skill-router
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/architecting-solutions ~/.claude/skills/architecting-solutions
-ln -s ~/Documents/code/GitHub/agent-playbook/skills/planning-with-files ~/.claude/skills/planning-with-files
+ln -s /path/to/agent-playbook/skills/skill-router ~/.claude/skills/skill-router
+ln -s /path/to/agent-playbook/skills/architecting-solutions ~/.claude/skills/architecting-solutions
+ln -s /path/to/agent-playbook/skills/planning-with-files ~/.claude/skills/planning-with-files
 ```
 
 ### Method 2: Copy Skills
@@ -84,26 +86,28 @@ ln -s ~/Documents/code/GitHub/agent-playbook/skills/planning-with-files ~/.claud
 Copy the skills directly to your global skills directories:
 
 ```bash
-mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills
+mkdir -p ~/.claude/skills ~/.codex/skills ~/.gemini/skills ~/.dsh/skills
 for skill in /path/to/agent-playbook/skills/*; do
   [ -f "$skill/SKILL.md" ] || continue
   cp -R "$skill" ~/.claude/skills/
   cp -R "$skill" ~/.codex/skills/
   cp -R "$skill" ~/.gemini/skills/
+  cp -R "$skill" ~/.dsh/skills/
 done
 ```
 
 ### Method 3: Add to Project-Specific Skills
 
-For project-specific usage, create `.claude/.codex/.gemini` skills directories in your project:
+For project-specific usage, create host skill directories in your project:
 
 ```bash
-mkdir -p .claude/skills .codex/skills .gemini/skills
+mkdir -p .claude/skills .codex/skills .gemini/skills .dsh/skills
 for skill in /path/to/agent-playbook/skills/*; do
   [ -f "$skill/SKILL.md" ] || continue
   cp -R "$skill" .claude/skills/
   cp -R "$skill" .codex/skills/
   cp -R "$skill" .gemini/skills/
+  cp -R "$skill" .dsh/skills/
 done
 ```
 
@@ -115,6 +119,7 @@ List your installed skills:
 ls -la ~/.claude/skills/
 ls -la ~/.codex/skills/
 ls -la ~/.gemini/skills/
+ls -la ~/.dsh/skills/
 ```
 
 ## Skills Manager
@@ -124,17 +129,39 @@ Use the local-only skills manager to inspect and manage skills across project an
 ```bash
 apb skills list --scope both --target all
 apb skills add ./skills/my-skill --scope project --target claude
+apb skills add ./skills/my-skill --scope project --target deepseek
 ```
 
 `apb` is a short alias for `agent-playbook`.
+
+## Validated Self-Improvement
+
+Capture a reusable correction, inspect candidates, and promote only after a
+representative check:
+
+```bash
+apb self-improve capture --kind correction --summary "Verify the current source before using cached state" --evidence "focused-test"
+apb self-improve list
+apb self-improve review cand-... --decision promote --reason "regression test passes" --validated
+```
+
+Export the reviewed notebook to Obsidian or another local Markdown system:
+
+```bash
+apb self-improve export --output /path/to/vault/Agent/Learning.md
+```
+
+Automatic Claude capture observes failed tool events only and never stores raw
+tool input or output. See [Self-Improvement Example](./docs/self-improvement-example.md).
 
 ## Platform support
 
 | Platform | Skill install | Hooks/config automation | Current status |
 |----------|---------------|-------------------------|----------------|
-| Claude Code | Yes | Installs SessionEnd and PostToolUse hooks | Full |
+| Claude Code | Yes | Installs SessionEnd and PostToolUseFailure hooks | Full |
 | Codex | Yes | Writes `agent_playbook` metadata block to `~/.codex/config.toml` | Partial |
 | Gemini | Yes | No hook wiring yet | Skill distribution only |
+| DeepSeek Harness | Yes | No hook wiring yet | Skill distribution only |
 
 The MCP server is a separate optional integration and is currently documented for Claude Code.
 
@@ -160,7 +187,7 @@ agent-playbook/
 | **[session-logger](./skills/session-logger/)** | Saves conversation history to session log files | Host-supported hook |
 | **[auto-trigger](./skills/auto-trigger/)** | Documents follow-up hook metadata between skills | Config only |
 | **[workflow-orchestrator](./skills/workflow-orchestrator/)** | Coordinates multi-skill workflows and records supported follow-ups | Manual / host-supported hook |
-| **[self-improving-agent](./skills/self-improving-agent/)** | Captures learning artifacts and proposes validated improvements | Manual / background follow-up |
+| **[self-improving-agent](./skills/self-improving-agent/)** | Captures privacy-safe candidates and promotes only validated rules | Failure hook / manual review |
 
 ### Core Development
 
@@ -267,15 +294,15 @@ code-reviewer → self-improving-agent → create-pr
 
 ## AI Agent Learning Path
 
-**[docs/ai-agent-learning-path.md](./docs/ai-agent-learning-path.md)** - A progressive learning path for building agents with Claude, GLM, and Codex:
+**[docs/ai-agent-learning-path.md](./docs/ai-agent-learning-path.md)** - A progressive learning path for building portable, validated agent workflows:
 
 | Level | Topic | Time | Outcome |
 |-------|------|------|------|
 | 1 | Prompt engineering fundamentals | 1 week | Complete a single-task workflow |
 | 2 | Skill development | 1 week | Ship a first reusable skill |
 | 3 | Workflow orchestration | 2 weeks | Build a complete automated workflow |
-| 4 | Self-learning systems | 2-3 weeks | Create an agent that learns from experience |
-| 5 | Self-evolving agents | 2-3 weeks | Build a more autonomous improvement loop |
+| 4 | Validated learning systems | 2-3 weeks | Turn evidence into reviewed behavior changes |
+| 5 | Cross-harness improvement | 2-3 weeks | Share one lifecycle across thin host adapters |
 
 ## Complete Workflow Example
 

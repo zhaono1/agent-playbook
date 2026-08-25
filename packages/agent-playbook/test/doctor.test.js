@@ -31,6 +31,7 @@ test("doctor reports healthy when hooks and config are present", () => {
   const tempDir = makeTempDir();
   const claudeDir = path.join(tempDir, "claude");
   const codexDir = path.join(tempDir, "codex");
+  const dshDir = path.join(tempDir, "dsh");
   const claudeSkillsDir = path.join(claudeDir, "skills");
   const codexSkillsDir = path.join(codexDir, "skills");
 
@@ -61,7 +62,7 @@ test("doctor reports healthy when hooks and config are present", () => {
           ],
         },
       ],
-      PostToolUse: [
+      PostToolUseFailure: [
         {
           matcher: "*",
           hooks: [
@@ -96,6 +97,7 @@ test("doctor reports healthy when hooks and config are present", () => {
         ...process.env,
         AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
         AGENT_PLAYBOOK_CODEX_DIR: codexDir,
+        AGENT_PLAYBOOK_DSH_DIR: dshDir,
       },
     }
   );
@@ -110,8 +112,30 @@ test("init shell-quotes hook paths and session dir", () => {
   const claudeDir = path.join(tempDir, "claude");
   const codexDir = path.join(tempDir, "codex");
   const geminiDir = path.join(tempDir, "gemini");
+  const dshDir = path.join(tempDir, "dsh");
   const repoRoot = path.resolve(__dirname, "..", "..", "..");
   const sessionDir = path.join(tempDir, "sessions with 'quote $(touch bad)");
+
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(claudeDir, "settings.json"),
+    JSON.stringify({
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "command",
+                command: "/tmp/old-apb self-improve --hook-source agent-playbook",
+              },
+            ],
+          },
+        ],
+      },
+    }),
+    "utf8"
+  );
 
   const result = spawnSync(
     process.execPath,
@@ -123,6 +147,7 @@ test("init shell-quotes hook paths and session dir", () => {
         AGENT_PLAYBOOK_CLAUDE_DIR: claudeDir,
         AGENT_PLAYBOOK_CODEX_DIR: codexDir,
         AGENT_PLAYBOOK_GEMINI_DIR: geminiDir,
+        AGENT_PLAYBOOK_DSH_DIR: dshDir,
       },
     }
   );
@@ -131,7 +156,7 @@ test("init shell-quotes hook paths and session dir", () => {
 
   const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8"));
   const sessionCommand = settings.hooks.SessionEnd[0].hooks[0].command;
-  const improveCommand = settings.hooks.PostToolUse[0].hooks[0].command;
+  const improveCommand = settings.hooks.PostToolUseFailure[0].hooks[0].command;
   const cliPath = path.join(claudeDir, "agent-playbook", "bin", "agent-playbook.js");
 
   assert.equal(
@@ -141,5 +166,9 @@ test("init shell-quotes hook paths and session dir", () => {
   assert.equal(
     improveCommand,
     `${shellQuote(cliPath)} self-improve --hook-source agent-playbook`
+  );
+  assert.equal((settings.hooks.PostToolUse || []).length, 0);
+  assert.ok(
+    fs.existsSync(path.join(dshDir, "skills", "self-improving-agent", "SKILL.md"))
   );
 });

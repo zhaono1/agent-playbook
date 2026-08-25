@@ -98,7 +98,7 @@ When a skill completes its workflow:
 
 ## Example Integration
 
-### prd-planner should add:
+### prd-planner should add
 
 ```yaml
 ---
@@ -116,28 +116,21 @@ hooks:
 ---
 ```
 
-### self-improving-agent already has:
+### self-improving-agent uses an explicit promotion gate
 
 ```yaml
 ---
 name: self-improving-agent
-description: Universal self-improvement that learns from all skill experiences...
-allowed-tools: Read, Write,Edit, Bash, Grep, Glob, WebSearch
-hooks:
-  after_complete:
-    - trigger: create-pr
-      mode: ask_first
-      condition: skills_modified
-    - trigger: session-logger
-      mode: auto
-      context: "Self-improvement cycle complete"
-  on_error:
-    - trigger: self-improving-agent
-      mode: background
+description: Captures privacy-safe candidates and promotes only validated rules...
+allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 ```
 
-### create-pr should add:
+Its Claude failure hook is installed by the CLI adapter, not declared as
+portable skill metadata. Other hosts should use documented adapters or manual
+capture.
+
+### create-pr should add
 
 ```yaml
 ---

@@ -93,13 +93,14 @@ Creating PRD using 4-file pattern...
 2. ✅ 缺少 Non-Goals 部分
 3. ✅ 成功标准需要具体数值
 
-### 提取的模式（存储到 memory/semantic-patterns.json）
-- ui_ux_specification_granularity: UI PRDs 需要明确的视觉规范
-- measurable_success_criteria: 成功标准必须包含具体数字
+### 捕获的候选经验
+- 状态：candidate（尚未改变任何 skill）
+- 候选 1：UI PRD 需要可验证的视觉规范
+- 候选 2：成功标准需要可测量指标
 
-### 生成的改进提案
-- prd-planner: 建议添加 UI 规范检查项
-- architecting-solutions: 建议添加视觉规范模板
+### 下一步验证
+- 用代表性 PRD 和 rubric 检查两条候选是否确实提高输出质量
+- 验证通过后，只更新一个最窄的责任 skill
 ```
 
 ---
@@ -174,26 +175,18 @@ review 一下代码
 这次 PRD 写得不错，但 UI 规范还可以更详细
 ```
 
-**Claude 调用 `self-improving-agent` 记录反馈：**
+**Claude 调用 `self-improving-agent` 捕获候选：**
 
-```json
-// memory/episodic/2025-01-12-prd-review.json
-{
-  "episode": "ep-2025-01-12-001",
-  "skill": "prd-planner",
-  "user_feedback": {
-    "rating": 8,
-    "positive": "PRD 结构清晰",
-    "improvement": "UI 规范需要更详细"
-  },
-  "pattern_extracted": "ui_ux_specification_granularity",
-  "confidence": 0.90,
-  "actions_taken": [
-    "提出 prd-planner 检查清单更新",
-    "提出 architecting-solutions UI 规范模板更新"
-  ]
-}
+```bash
+apb self-improve capture \
+  --kind correction \
+  --summary "PRD 中的 UI 规范需要可验证的尺寸、状态与相对位置" \
+  --evidence "explicit-user-feedback"
 ```
+
+这条经验先进入 candidate 队列。只有经过代表性检查并显式执行
+`review --decision promote --validated` 后，才会进入 active rules；单次反馈
+不会自动改写多个 skills。
 
 ---
 

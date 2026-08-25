@@ -1,138 +1,62 @@
 # Self-Improving Agent
 
-A self-improvement system that captures learning artifacts from skill experiences and proposes validated updates.
+A privacy-safe learning lifecycle for agent workflows. It separates observation
+from durable behavior change:
 
-## Overview
-
-This agent captures reusable evidence from skill interactions. It implements a feedback loop with memory artifacts, self-correction proposals, and evolution markers. Durable skill or code changes still require validation or explicit approval.
-
-## Key Features
-
-- **Multi-Memory Architecture**: Semantic + Episodic + Working memory
-- **Evidence-Gated Learning**: Captures reusable lessons from skill workflows
-- **Pattern Extraction**: Converts experiences into reusable patterns
-- **Self-Correction**: Fixes skill guidance when errors occur
-- **Self-Validation**: Periodically verifies skill accuracy
-- **Proposal Artifacts**: Writes proposed updates before durable skill changes
-- **Confidence Tracking**: Measures pattern reliability over time
-- **Human-in-the-Loop**: Collects feedback to validate improvements
-
-## Memory System
-
-Current Claude Code hook integration writes to:
-
-```
-~/.claude/memory/
-├── semantic/       # Patterns, rules, best practices
-├── episodic/       # Specific experiences and episodes
-└── working/        # Current session context
+```text
+failure/correction -> candidate -> validation -> promoted rule or rejection
 ```
 
-## How It Works
+## What Is Implemented
 
-```
-Any Skill Completes
-        ↓
-Extract Experience → Identify Patterns → Write Proposals → Consolidate Memory
-        ↓                     ↓                  ↓              ↓
-   What happened?    What can we reuse?   Which proposals? Track metrics
-```
+- Claude Code failure-hook capture without storing raw tool input or output
+- Redaction, bounded event records, stable candidate fingerprints, and deduplication
+- Explicit review states: `candidate`, `promoted`, and `rejected`
+- A `--validated` gate before promotion
+- Markdown export for Obsidian or another local knowledge notebook
+- Executable CLI tests plus scenario evals in `evals/`
 
-## Installation
+## Quick Start
+
+Install skills and the Claude failure hook:
 
 ```bash
-apb skills add ./skills/self-improving-agent --scope global --target all --link
+pnpm dlx @codeharbor/agent-playbook init
 ```
 
-## Hooks (Optional)
+Capture a manual lesson:
 
-Wire hooks to capture errors and session-end signals:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash|Write|Edit",
-        "hooks": [
-          { "type": "command", "command": "bash ${SKILLS_DIR}/self-improving-agent/hooks/pre-tool.sh \"$TOOL_NAME\" \"$TOOL_INPUT\"" }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          { "type": "command", "command": "bash ${SKILLS_DIR}/self-improving-agent/hooks/post-bash.sh \"$TOOL_OUTPUT\" \"$EXIT_CODE\"" }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          { "type": "command", "command": "bash ${SKILLS_DIR}/self-improving-agent/hooks/session-end.sh" }
-        ]
-      }
-    ]
-  }
-}
+```bash
+apb self-improve capture \
+  --kind correction \
+  --summary "Verify the current source before relying on cached state" \
+  --evidence "focused-test"
 ```
 
-## Triggering
+Review the queue and promote only after validation:
 
-### Host-Supported Follow-up
-When the host runtime supports hook follow-ups, this skill can be recorded or run after high-signal workflows such as:
-- prd-planner
-- code-reviewer
-- debugger
-- refactoring-specialist
-- etc.
-
-### Manual
-```
-"自我进化"
-"self-improve"
-"分析今天的经验"
-"总结这次教训"
+```bash
+apb self-improve list
+apb self-improve review cand-123 \
+  --decision promote \
+  --reason "confirmed by a representative test" \
+  --validated
 ```
 
-## Example Learning
+Export to a knowledge notebook:
 
-### Episode
-```yaml
-Skill: debugger
-Situation: Form submission doesn't refresh data
-Root Cause: Empty callback function
-Pattern: Always verify callbacks have implementations
-Confidence: 0.95 → Proposals: debugger, prd-implementation-precheck
+```bash
+apb self-improve export --output /path/to/vault/Agent/Learning.md
 ```
 
-### Skill Update
-```markdown
-## Proposed Update (2025-01-11)
+State defaults to `~/.agent-playbook/self-improvement/`. Set
+`AGENT_PLAYBOOK_DATA_DIR` to use another local root.
 
-### Pattern Added
-**Callback Verification**: Always verify that callback functions
-passed as props are not empty and actually execute logic.
+## Safety Model
 
-**Source**: Episode ep-2025-01-11-003 (3 occurrences)
-**Action**: Propose adding to debugger checklist
-```
+Automatic capture is limited to failed tool events. It stores a redacted summary
+and generic evidence label, not a transcript or raw tool payload. A candidate
+cannot become an active rule without an explicit review reason and `--validated`.
 
-## Research Basis
-
-- [SimpleMem: Efficient Lifelong Memory](https://arxiv.org/html/2601.02553v1)
-- [ACM Memory Mechanisms Survey](https://dl.acm.org/doi/10.1145/3748302)
-- [Lifelong Learning of LLM Agents](https://arxiv.org/html/2501.07278v1)
-
-## Templates
-
-Reusable templates live in `skills/self-improving-agent/templates`:
-- `pattern-template.md`
-- `correction-template.md`
-- `validation-template.md`
-
-## License
-
-MIT
+See [learning-lifecycle.md](./references/learning-lifecycle.md) for data and host
+adapter contracts.
