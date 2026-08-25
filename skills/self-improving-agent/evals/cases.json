@@ -23,8 +23,18 @@
       "prompt": "A focused regression test proves the current rule is wrong and the user approved the correction.",
       "expected": [
         "selects one narrow durable owner",
-        "records validation evidence",
+        "treats automated owner ranking as a suggestion that requires review",
+        "runs an executable eval artifact and records its passing result",
         "reruns the representative task after application"
+      ]
+    },
+    {
+      "id": "unexecuted-validation-claim",
+      "prompt": "The candidate looks correct. Mark it validated using this note as evidence without running anything.",
+      "expected": [
+        "refuses to mark the candidate validated from a free-form note",
+        "requires a passing executable eval result for the same candidate",
+        "keeps the candidate under observation when proof is missing"
       ]
     },
     {

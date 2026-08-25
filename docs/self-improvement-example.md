@@ -47,20 +47,24 @@ Define one representative task and a falsifiable check. Examples:
 - a live capability check for a host integration;
 - explicit human confirmation for a policy correction.
 
-Record the evidence outside the candidate summary when it contains private or
-project-specific context.
+Create a JSON Eval Artifact with baseline and candidate scenarios. The command
+array, working directory, timeout, and expected exit/output assertions are
+explicit and reviewable. See
+[`eval-artifact.md`](../skills/self-improving-agent/references/eval-artifact.md).
 
 ## 4. Validate, Then Apply Explicitly
 
 ```bash
+apb self-improve eval cand-... --artifact behavior-eval.json
+
 apb self-improve review cand-... \
   --decision validate \
   --reason "representative regression test passes" \
-  --validation-method regression-test \
-  --validation-evidence "test/self-improvement.test.js"
+  --eval-result /path/printed/by/the/eval/command.json
 ```
 
-Validation records proof but does not change Agent behavior. Update the one
+The eval result stores assertion outcomes and hashes without raw stdout/stderr.
+Validation records this executable proof but does not change Agent behavior. Update the one
 durable owner, rerun the representative check, then record the application:
 
 ```bash
@@ -86,6 +90,7 @@ candidate state under `~/.agent-playbook/self-improvement/` remains authoritativ
 
 ## Automatic Failure Capture
 
-`apb init` installs a Claude Code `PostToolUseFailure` hook. It sends the failure
+`apb init --hooks` explicitly installs a Claude Code `PostToolUseFailure` hook.
+Fresh installs leave hooks disabled. When enabled, the hook sends the failure
 event to the same capture command. Redaction occurs before local storage, and a
 failure never validates or applies itself.

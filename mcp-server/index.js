@@ -16,7 +16,7 @@ const CATALOG_PATH = path.join(SKILLS_DIR, "catalog.json");
 const SKILL_FILE_NAME = "SKILL.md";
 const DEFAULT_CATEGORY = "other";
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const SERVER_VERSION = "0.4.1";
+const SERVER_VERSION = "0.4.2";
 const CATEGORY_MAP = loadSkillCatalog();
 const CATEGORY_NAMES = Object.keys(CATEGORY_MAP);
 

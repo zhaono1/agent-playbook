@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.2 - 2026-08-25
+
+### Added
+
+- Executable baseline/candidate Eval Artifacts with bounded command execution,
+  private hash-only results, and validation gates that reject failed evaluations
+- An independently tested self-improvement core module and eval runner
+- A Behavior Inbox, local durable-owner suggestions, and reviewable Behavior
+  Change Proposal generation
+- A local-static `apb conformance` report that separates proven distribution and
+  configuration from unsupported or unverified host-runtime capabilities
+
+### Changed
+
+- Fresh installs now leave Claude hooks disabled unless users explicitly pass
+  `--hooks`; `--no-hooks` removes previously managed hooks and their local runtime
+- Candidate validation now requires a passing executable eval result for the same
+  candidate instead of free-form evidence strings
+- Claude hooks now use the documented command-plus-args form without a shell
+- Eval commands inherit a minimal platform environment instead of arbitrary
+  parent-process credentials
+
+### Fixed
+
+- Preserve TOML array tables that follow legacy Agent Playbook metadata
+- Restrict stale skill-state removal to the active project, scope, and target
+- Reject tampered eval summaries and eval-result symlink escapes; escape
+  hook-derived Markdown and HTML in generated Behavior Change Proposals
+
 ## 0.4.1 - 2026-08-25
 
 ### Added

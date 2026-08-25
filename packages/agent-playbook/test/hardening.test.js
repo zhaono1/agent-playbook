@@ -220,6 +220,39 @@ test("Codex metadata block round-trips without orphaning keys into another table
   assert.match(uninstalled, /\[beta\]\ny = 2/);
 });
 
+test("Codex metadata cleanup preserves following array tables", () => {
+  const root = makeTempDir();
+  const env = makeHostEnv(root);
+  const configPath = path.join(root, "codex", "config.toml");
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(
+    configPath,
+    [
+      "[agent_playbook]",
+      'version = "old"',
+      'installed_at = "old"',
+      "",
+      "[[mcp_servers]]",
+      'name = "filesystem"',
+      'command = "example-server"',
+      "",
+    ].join("\n"),
+    "utf8"
+  );
+
+  assert.strictEqual(run(["init", "--repo", repoRoot, "--no-hooks"], env).status, 0);
+  const installed = fs.readFileSync(configPath, "utf8");
+  assert.match(installed, /\[\[mcp_servers\]\]/);
+  assert.match(installed, /name = "filesystem"/);
+  assert.match(installed, /command = "example-server"/);
+
+  assert.strictEqual(run(["uninstall", "--repo", repoRoot], env).status, 0);
+  const uninstalled = fs.readFileSync(configPath, "utf8");
+  assert.match(uninstalled, /\[\[mcp_servers\]\]/);
+  assert.match(uninstalled, /name = "filesystem"/);
+  assert.match(uninstalled, /command = "example-server"/);
+});
+
 test("malformed Codex markers stop init before any skill mutation", () => {
   const root = makeTempDir();
   const env = makeHostEnv(root);
@@ -240,6 +273,57 @@ test("malformed Codex markers stop init before any skill mutation", () => {
   assert.ok(!fs.existsSync(path.join(root, "claude", "skills", "skill-router")));
 });
 
+test("fresh init leaves Claude hooks disabled unless explicitly enabled", () => {
+  const root = makeTempDir();
+  const env = makeHostEnv(root);
+
+  const result = run(["init", "--repo", repoRoot], env);
+
+  assert.strictEqual(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Hooks: disabled/);
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(root, "claude", "skills", ".agent-playbook.json"), "utf8")
+  );
+  assert.strictEqual(manifest.hooksEnabled, false);
+  assert.ok(!fs.existsSync(path.join(root, "claude", "settings.json")));
+  assert.ok(!fs.existsSync(path.join(root, "claude", "agent-playbook")));
+});
+
+test("explicit no-hooks removes previously installed managed hooks", () => {
+  const root = makeTempDir();
+  const env = makeHostEnv(root);
+
+  assert.strictEqual(run(["init", "--repo", repoRoot, "--hooks"], env).status, 0);
+  assert.ok(fs.existsSync(path.join(root, "claude", "agent-playbook")));
+
+  const disabled = run(["init", "--repo", repoRoot, "--no-hooks"], env);
+
+  assert.strictEqual(disabled.status, 0, disabled.stderr);
+  assert.match(disabled.stdout, /Hooks: disabled/);
+  const settings = JSON.parse(
+    fs.readFileSync(path.join(root, "claude", "settings.json"), "utf8")
+  );
+  assert.ok(!settings.agentPlaybook);
+  assert.deepStrictEqual(settings.hooks.SessionEnd || [], []);
+  assert.deepStrictEqual(settings.hooks.PostToolUseFailure || [], []);
+  assert.ok(!fs.existsSync(path.join(root, "claude", "agent-playbook")));
+});
+
+test("session-dir requires explicit hook opt-in on a fresh install", () => {
+  const root = makeTempDir();
+  const env = makeHostEnv(root);
+
+  const result = run(
+    ["init", "--repo", repoRoot, "--session-dir", path.join(root, "sessions")],
+    env
+  );
+
+  assert.notStrictEqual(result.status, 0);
+  assert.match(result.stderr, /--session-dir requires Claude hooks/);
+  assert.ok(!fs.existsSync(path.join(root, "claude", "skills", "skill-router")));
+  assert.ok(!fs.existsSync(path.join(root, "codex", "config.toml")));
+});
+
 test("corrupt Claude settings stop hook-enabled init before skill mutation", () => {
   const root = makeTempDir();
   const env = makeHostEnv(root);
@@ -247,7 +331,7 @@ test("corrupt Claude settings stop hook-enabled init before skill mutation", () 
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
   fs.writeFileSync(settingsPath, "{broken-settings", "utf8");
 
-  const result = run(["init", "--repo", repoRoot], env);
+  const result = run(["init", "--repo", repoRoot, "--hooks"], env);
 
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /settings\.json.*corrupt|unable to parse.*settings/i);
@@ -288,6 +372,73 @@ test("project-scoped state uses distinct project identities", () => {
   );
   assert.ok(!fs.existsSync(path.join(projectA, ".claude", "skills", "shared-skill")));
   assert.ok(fs.existsSync(path.join(projectB, ".claude", "skills", "shared-skill", "SKILL.md")));
+});
+
+test("removing stale project state preserves another project's same-name skill", () => {
+  const root = makeTempDir();
+  const env = makeHostEnv(root);
+  const sourceSkill = writeSkill(path.join(root, "source"), "shared-skill", "# Shared\n");
+  const projectA = path.join(root, "project-a");
+  const projectB = path.join(root, "project-b");
+  fs.mkdirSync(path.join(projectA, ".git"), { recursive: true });
+  fs.mkdirSync(path.join(projectB, ".git"), { recursive: true });
+
+  for (const project of [projectA, projectB]) {
+    const result = run(
+      ["skills", "add", sourceSkill, "--repo", project, "--scope", "project", "--target", "claude", "--copy"],
+      env
+    );
+    assert.strictEqual(result.status, 0, result.stderr);
+  }
+  const secondTarget = run(
+    ["skills", "add", sourceSkill, "--repo", projectA, "--scope", "project", "--target", "codex", "--copy"],
+    env
+  );
+  assert.strictEqual(secondTarget.status, 0, secondTarget.stderr);
+
+  fs.rmSync(path.join(projectA, ".claude", "skills", "shared-skill"), {
+    recursive: true,
+    force: true,
+  });
+  const remove = run(
+    ["skills", "remove", "shared-skill", "--repo", projectA, "--scope", "project", "--target", "claude"],
+    env
+  );
+
+  assert.strictEqual(remove.status, 0, remove.stderr);
+  assert.match(remove.stdout, /Removed 1 state entry/);
+  const state = JSON.parse(fs.readFileSync(path.join(root, "data", "state.json"), "utf8"));
+  const entries = state.skills.filter((entry) => entry.name === "shared-skill");
+  assert.strictEqual(entries.length, 2);
+  assert.ok(fs.existsSync(path.join(projectA, ".codex", "skills", "shared-skill", "SKILL.md")));
+  assert.ok(fs.existsSync(path.join(projectB, ".claude", "skills", "shared-skill", "SKILL.md")));
+});
+
+test("removing ambiguous stale state requires disambiguating filters", () => {
+  const root = makeTempDir();
+  const env = makeHostEnv(root);
+  const sourceSkill = writeSkill(path.join(root, "source"), "shared-skill", "# Shared\n");
+  const project = path.join(root, "project");
+  fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+
+  for (const target of ["claude", "codex"]) {
+    const add = run(
+      ["skills", "add", sourceSkill, "--repo", project, "--scope", "project", "--target", target, "--copy"],
+      env
+    );
+    assert.strictEqual(add.status, 0, add.stderr);
+    fs.rmSync(path.join(project, `.${target}`, "skills", "shared-skill"), {
+      recursive: true,
+      force: true,
+    });
+  }
+
+  const remove = run(["skills", "remove", "shared-skill", "--repo", project], env);
+
+  assert.notStrictEqual(remove.status, 0);
+  assert.match(remove.stderr, /Multiple stale state entries/);
+  const state = JSON.parse(fs.readFileSync(path.join(root, "data", "state.json"), "utf8"));
+  assert.strictEqual(state.skills.filter((entry) => entry.name === "shared-skill").length, 2);
 });
 
 test("corrupt skill state fails closed and preserves the original bytes", () => {
@@ -345,7 +496,7 @@ test("repair refreshes an existing hook CLI copy", () => {
   const root = makeTempDir();
   const env = makeHostEnv(root);
 
-  assert.strictEqual(run(["init", "--repo", repoRoot], env).status, 0);
+  assert.strictEqual(run(["init", "--repo", repoRoot, "--hooks"], env).status, 0);
   const localCli = path.join(root, "claude", "agent-playbook", "src", "cli.js");
   fs.writeFileSync(localCli, "// stale runtime\n", "utf8");
 

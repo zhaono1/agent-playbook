@@ -1,7 +1,7 @@
 {
   "name": "@codeharbor/agent-playbook",
-  "version": "0.4.1",
-  "description": "Local skill manager and validated learning lifecycle for Claude Code, Codex, Gemini, and DeepSeek Harness.",
+  "version": "0.4.2",
+  "description": "Local-first Behavior CI and skill lifecycle for Claude Code, Codex, Gemini, and DeepSeek Harness.",
   "license": "MIT",
   "type": "commonjs",
   "bin": {
@@ -10,7 +10,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "lint": "node -c src/cli.js && node -c src/persistence.js && node -c src/codex-config.js && node -c src/ownership.js",
+    "lint": "node -c src/cli.js && node -c src/persistence.js && node -c src/codex-config.js && node -c src/ownership.js && node -c src/self-improvement.js && node -c src/eval-runner.js && node -c src/owner-resolver.js && node -c src/behavior-proposal.js && node -c src/host-conformance.js",
     "prepack": "node scripts/sync-skills.js copy",
     "postpack": "node scripts/sync-skills.js clean"
   },
